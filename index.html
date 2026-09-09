@@ -10,46 +10,84 @@
   <main class="container">
     <h1>برنامج الجرد</h1>
 
-    <section class="card">
-      <div class="search-row">
-        <input id="search-input" type="search" placeholder="بحث باسم الصنف..." autocomplete="off">
-        <span id="items-count"></span>
-      </div>
-      <form id="item-form">
-        <div class="form-grid">
-          <label>اسم الصنف<input id="field-name" type="text" required></label>
-          <label>السعر التجاري<input id="field-commercial" type="number" min="0" step="any" value="0"></label>
-          <label>سعر البيع<input id="field-selling" type="number" min="0" step="any" value="0"></label>
-          <label>الكمية<input id="field-qty" type="number" min="0" step="1" value="0"></label>
-          <label>السعر المدفوع (تلقائي)<input id="field-paid" type="number" min="0" step="any" value="0" readonly></label>
-        </div>
-        <p id="form-error" class="error" hidden></p>
-        <div class="form-actions">
-          <button id="submit-btn" type="submit">إضافة</button>
-          <button id="cancel-edit-btn" type="button" hidden>إلغاء التعديل</button>
-        </div>
-      </form>
+    <section id="home-view">
+      <button id="new-session-btn" type="button">+ جرد جديد</button>
+      <p id="home-error" class="error" hidden></p>
+      <div id="sessions-list"></div>
+      <p id="sessions-empty" class="muted">لا توجد جوارد محفوظة — ابدأ جرد جديد.</p>
     </section>
 
-    <section class="card table-card">
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>اسم الصنف</th>
-              <th>السعر التجاري</th>
-              <th>سعر البيع</th>
-              <th>الكمية</th>
-              <th>السعر المدفوع</th>
-              <th>سعر البيع الاجمالي</th>
-              <th>صافي المكسب</th>
-              <th>إجراءات</th>
-            </tr>
-          </thead>
-          <tbody id="items-tbody"></tbody>
-        </table>
-        <p id="empty-state" class="muted">لا توجد أصناف بعد. أضف أول صنف من الفورم فوق.</p>
+    <section id="detail-view" hidden>
+      <button id="back-btn" type="button">→ الرئيسية</button>
+      <h2 id="session-title"></h2>
+      <section class="card">
+        <div class="search-row">
+          <input id="search-input" type="search" placeholder="بحث باسم الصنف..." autocomplete="off">
+          <span id="items-count"></span>
+        </div>
+        <form id="item-form">
+          <div class="form-grid">
+            <label>اسم الصنف<input id="field-name" type="text" required></label>
+            <label>السعر التجاري<input id="field-commercial" type="number" min="0" step="any" value="0"></label>
+            <label>سعر البيع<input id="field-selling" type="number" min="0" step="any" value="0"></label>
+            <label>الكمية<input id="field-qty" type="number" min="0" step="1" value="0"></label>
+            <label>السعر المدفوع (تلقائي)<input id="field-paid" type="number" min="0" step="any" value="0" readonly></label>
+          </div>
+          <p id="form-error" class="error" hidden></p>
+          <div class="form-actions">
+            <button id="submit-btn" type="submit">إضافة</button>
+            <button id="cancel-edit-btn" type="button" hidden>إلغاء التعديل</button>
+          </div>
+        </form>
+      </section>
+
+      <div class="totals-cards">
+        <div class="total-card">
+          <span class="total-label">المدفوع للكل</span>
+          <span id="total-paid" class="total-value"></span>
+        </div>
+        <div class="total-card">
+          <span class="total-label">البيع الإجمالي للكل</span>
+          <span id="total-sell" class="total-value"></span>
+        </div>
+        <div class="total-card">
+          <span class="total-label">الصافي للكل</span>
+          <span id="total-net" class="total-value"></span>
+        </div>
       </div>
+
+      <section class="card table-card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>اسم الصنف</th>
+                <th>السعر التجاري</th>
+                <th>سعر البيع</th>
+                <th>الكمية</th>
+                <th>السعر المدفوع</th>
+                <th>سعر البيع الاجمالي</th>
+                <th>صافي المكسب</th>
+                <th>إجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="items-tbody"></tbody>
+            <tfoot>
+              <tr id="totals-foot">
+                <td>الإجمالي</td>
+                <td></td>
+                <td></td>
+                <td id="foot-count"></td>
+                <td id="foot-paid"></td>
+                <td id="foot-total"></td>
+                <td id="foot-net"></td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+          <p id="empty-state" class="muted">لا توجد أصناف بعد. أضف أول صنف من الفورم فوق.</p>
+        </div>
+      </section>
     </section>
 
     <footer class="muted">البيانات محفوظة في المتصفح فقط على هذا الجهاز.</footer>
