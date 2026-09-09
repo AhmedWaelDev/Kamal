@@ -1894,6 +1894,14 @@ Replace the FULL content of `app.js` with exactly this content (Task 8 behavior 
       card.className = 'session-card';
       const info = document.createElement('div');
       info.className = 'session-info';
+      info.setAttribute('role', 'button');
+      info.tabIndex = 0;
+      info.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openSession(s.id);
+        }
+      });
       const name = document.createElement('span');
       name.className = 'session-name';
       name.textContent = s.name;
@@ -1991,7 +1999,7 @@ Expected: PASS, 19 passing, 0 failing.
 
 - [ ] **Step 3: Verify wiring (adapt quoting for PowerShell if needed, same conditions)**
 
-Check A — `app.js` contains each of `renderHome(`, `openSession(`, `renderTotals(`, `sessionTotals(`, `timeAgo(`, `migrateLegacy(`, `createSession(`, `saveSessions(`, `SESSIONS_KEY`, `showView(`, `itemCountText(`, and contains NO `loadItems(` and NO `saveItems(` and NO `inventory_items_v1`.
+Check A — `app.js` contains each of `renderHome(`, `openSession(`, `renderTotals(`, `sessionTotals(`, `timeAgo(`, `migrateLegacy(`, `createSession(`, `saveSessions(`, `SESSIONS_KEY`, `showView(`, `itemCountText(`, `setAttribute('role', 'button')`, `keydown`, and contains NO `loadItems(` and NO `saveItems(` and NO `inventory_items_v1`.
 Check B — `app.js` still contains all Task 8 behaviors: `calcTotal(`, `calcNet(`, `calcPaid(`, `validateItem(`, `filterItems(`, `createItem(`, `formatMoney(`, `syncPaid`, `textContent`, with the only `innerHTML` occurrences being `tbody.innerHTML = ''` and `sessionsList.innerHTML = ''`.
 Expected: both checks pass.
 
