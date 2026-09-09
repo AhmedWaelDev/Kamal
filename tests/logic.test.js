@@ -100,3 +100,97 @@ test('formatMoney drops trailing zeros (250 not 250.00)', () => {
   assert.equal(formatMoney(15.5), '15.5 ج.م');
   assert.equal(formatMoney(10.25), '10.25 ج.م');
 });
+
+test('autoSessionName uses date and disambiguates', () => {
+  const { autoSessionName } = require('../logic.js');
+  const day = new Date(2026, 8, 8, 12, 0, 0).getTime();
+  assert.equal(autoSessionName([], day), 'جرد يوم 8/9/2026');
+  const one = [{ name: 'جرد يوم 8/9/2026' }];
+  assert.equal(autoSessionName(one, day), 'جرد يوم 8/9/2026 (2)');
+  const two = [{ name: 'جرد يوم 8/9/2026' }, { name: 'جرد يوم 8/9/2026 (2)' }];
+  assert.equal(autoSessionName(two, day), 'جرد يوم 8/9/2026 (3)');
+});
+
+test('createSession builds an empty dated session', () => {
+  const { createSession } = require('../logic.js');
+  const day = new Date(2026, 8, 8, 12, 0, 0).getTime();
+  const s = createSession([], day);
+  assert.equal(s.name, 'جرد يوم 8/9/2026');
+  assert.equal(typeof s.id, 'string');
+  assert.equal(s.createdAt, day);
+  assert.deepEqual(s.items, []);
+});
+
+test('sessionTotals sums paid, total and net', () => {
+  const { sessionTotals } = require('../logic.js');
+  const t = sessionTotals({ items: [
+    { commercialPrice: 100, sellingPrice: 130, quantity: 10 },
+    { commercialPrice: 50, sellingPrice: 40, quantity: 2 }
+  ] });
+  assert.equal(t.paid, 1100);
+  assert.equal(t.total, 1380);
+  assert.equal(t.net, 280);
+});
+
+test('timeAgo formats Arabic relative time', () => {
+  const { timeAgo } = require('../logic.js');
+  const now = new Date(2026, 8, 10, 12, 0, 0).getTime();
+  const min = 60000, hour = 3600000, day = 86400000;
+  assert.equal(timeAgo(now - 30 * 1000, now), 'الآن');
+  assert.equal(timeAgo(now - 1 * min, now), 'منذ دقيقة');
+  assert.equal(timeAgo(now - 2 * min, now), 'منذ دقيقتين');
+  assert.equal(timeAgo(now - 5 * min, now), 'منذ 5 دقائق');
+  assert.equal(timeAgo(now - 15 * min, now), 'منذ 15 دقيقة');
+  assert.equal(timeAgo(now - 1 * hour, now), 'منذ ساعة');
+  assert.equal(timeAgo(now - 2 * hour, now), 'منذ ساعتين');
+  assert.equal(timeAgo(now - 5 * hour, now), 'منذ 5 ساعات');
+  assert.equal(timeAgo(now - 1 * day, now), 'منذ يوم');
+  assert.equal(timeAgo(now - 2 * day, now), 'منذ يومين');
+  assert.equal(timeAgo(now - 4 * day, now), 'منذ 4 أيام');
+  assert.equal(timeAgo(now - 10 * day, now), 'منذ أسبوع');
+  assert.equal(timeAgo(now - 20 * day, now), 'منذ أسبوعين');
+  assert.equal(timeAgo(now - 60 * day, now), 'يوم 12/7/2026');
+});
+
+test('sessions save/load round-trip and reject corrupt JSON', () => {
+  const { saveSessions, loadSessions, SESSIONS_KEY } = require('../logic.js');
+  assert.equal(SESSIONS_KEY, 'inventory_sessions_v1');
+  const mem = {};
+  const fake = {
+    getItem: (k) => (k in mem ? mem[k] : null),
+    setItem: (k, v) => { mem[k] = String(v); },
+    removeItem: (k) => { delete mem[k]; }
+  };
+  assert.deepEqual(loadSessions(fake), []);
+  const sessions = [{ id: 's1', name: 'جرد يوم 8/9/2026', createdAt: 1, items: [] }];
+  saveSessions(fake, sessions);
+  assert.deepEqual(loadSessions(fake), sessions);
+  assert.throws(() => loadSessions({ getItem: () => '{oops', setItem: () => {}, removeItem: () => {} }), SyntaxError);
+});
+
+test('migrateLegacy moves old items once into جرد سابق', () => {
+  const { migrateLegacy, LEGACY_KEY, SESSIONS_KEY } = require('../logic.js');
+  function makeFake(seed) {
+    const mem = Object.assign({}, seed);
+    return {
+      mem,
+      getItem: (k) => (k in mem ? mem[k] : null),
+      setItem: (k, v) => { mem[k] = String(v); },
+      removeItem: (k) => { delete mem[k]; }
+    };
+  }
+  const day = new Date(2026, 8, 10, 12, 0, 0).getTime();
+  const items = [{ id: 'a', name: 'شاي', commercialPrice: 1, sellingPrice: 2, quantity: 3, paidAmount: 3, createdAt: 1 }];
+  const f1 = makeFake({ [LEGACY_KEY]: JSON.stringify(items) });
+  const out = migrateLegacy(f1, day);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].name, 'جرد سابق');
+  assert.deepEqual(out[0].items, items);
+  assert.equal(f1.getItem(LEGACY_KEY), null);
+  assert.deepEqual(JSON.parse(f1.getItem(SESSIONS_KEY)), out);
+  const f2 = makeFake({});
+  assert.deepEqual(migrateLegacy(f2, day), []);
+  const f3 = makeFake({ [LEGACY_KEY]: JSON.stringify([]) });
+  assert.deepEqual(migrateLegacy(f3, day), []);
+  assert.equal(f3.getItem(LEGACY_KEY), null);
+});

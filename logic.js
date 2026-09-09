@@ -81,6 +81,114 @@ function saveItems(storage, items) {
   storage.setItem(STORAGE_KEY, JSON.stringify(items));
 }
 
+function formatDate(d) {
+  return d.getDate() + '/' + (d.getMonth() + 1) + '/' + d.getFullYear();
+}
+
+function autoSessionName(sessions, now) {
+  const base = 'جرد يوم ' + formatDate(new Date(now));
+  const names = {};
+  sessions.forEach((s) => { names[s.name] = true; });
+  if (!names[base]) {
+    return base;
+  }
+  let i = 2;
+  while (names[base + ' (' + i + ')']) {
+    i++;
+  }
+  return base + ' (' + i + ')';
+}
+
+function createSession(sessions, now) {
+  const t = now === undefined ? Date.now() : now;
+  return { id: makeId(), name: autoSessionName(sessions, t), createdAt: t, items: [] };
+}
+
+function sessionTotals(session) {
+  let paid = 0;
+  let total = 0;
+  let net = 0;
+  session.items.forEach((it) => {
+    paid += calcPaid(it.commercialPrice, it.quantity);
+    total += calcTotal(it.sellingPrice, it.quantity);
+    net += calcNet(it.commercialPrice, it.sellingPrice, it.quantity);
+  });
+  return { paid, total, net };
+}
+
+function arUnit(n, one, two, few, many) {
+  if (n === 1) {
+    return 'منذ ' + one;
+  }
+  if (n === 2) {
+    return 'منذ ' + two;
+  }
+  if (n <= 10) {
+    return 'منذ ' + n + ' ' + few;
+  }
+  return 'منذ ' + n + ' ' + many;
+}
+
+function timeAgo(ts, now) {
+  const t = now === undefined ? Date.now() : now;
+  const diff = Math.max(0, t - ts);
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) {
+    return 'الآن';
+  }
+  if (minutes < 60) {
+    return arUnit(minutes, 'دقيقة', 'دقيقتين', 'دقائق', 'دقيقة');
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return arUnit(hours, 'ساعة', 'ساعتين', 'ساعات', 'ساعة');
+  }
+  const days = Math.floor(hours / 24);
+  if (days < 7) {
+    return arUnit(days, 'يوم', 'يومين', 'أيام', 'يوم');
+  }
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) {
+    return arUnit(weeks, 'أسبوع', 'أسبوعين', 'أسابيع', 'أسبوع');
+  }
+  return 'يوم ' + formatDate(new Date(ts));
+}
+
+const SESSIONS_KEY = 'inventory_sessions_v1';
+const LEGACY_KEY = 'inventory_items_v1';
+
+function loadSessions(storage) {
+  const raw = storage.getItem(SESSIONS_KEY);
+  if (raw === null || raw === undefined) {
+    return [];
+  }
+  const parsed = JSON.parse(raw);
+  if (!Array.isArray(parsed)) {
+    throw new SyntaxError('stored sessions is not an array');
+  }
+  return parsed;
+}
+
+function saveSessions(storage, sessions) {
+  storage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+}
+
+function migrateLegacy(storage, now) {
+  const sessions = loadSessions(storage);
+  const raw = storage.getItem(LEGACY_KEY);
+  if (raw === null || raw === undefined) {
+    return sessions;
+  }
+  const items = JSON.parse(raw);
+  if (Array.isArray(items) && items.length > 0) {
+    const t = now === undefined ? Date.now() : now;
+    sessions.unshift({ id: makeId(), name: 'جرد سابق', createdAt: t, items });
+  }
+  storage.removeItem(LEGACY_KEY);
+  saveSessions(storage, sessions);
+  return sessions;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { calcTotal, calcNet, calcPaid, validateItem, createItem, filterItems, loadItems, saveItems, STORAGE_KEY, formatMoney };
+  module.exports = { calcTotal, calcNet, calcPaid, validateItem, createItem, filterItems, loadItems, saveItems, STORAGE_KEY, formatMoney, formatDate, autoSessionName, createSession, sessionTotals, timeAgo, SESSIONS_KEY, LEGACY_KEY, loadSessions, saveSessions, migrateLegacy };
 }
