@@ -14,7 +14,8 @@ Simple Arabic RTL website to track shop inventory: a home screen with saved inve
 - Session auto-naming: `جرد يوم D/M/YYYY` (e.g. `جرد يوم 8/9/2026`), suffixed ` (2)`, ` (3)`… when the name exists.
 - Relative time (Arabic): `الآن` (<1 min), `منذ دقيقة/دقيقتين/N دقائق/N دقيقة`, `منذ ساعة/ساعتين/N ساعات/N ساعة`, `منذ يوم/يومين/N أيام/N يوم`, `منذ أسبوع/أسبوعين/N أسابيع/N أسبوع`, older → `يوم D/M/YYYY`.
 - Session totals (user chose cards + footer row): 3 summary cards above the table (paid/selling/net, net green/red) plus a bold `الإجمالي` footer row (item count + the 3 sums). Totals = sums of per-item computed values, formatted with `formatMoney`.
-- Legacy migration: existing `inventory_items_v1` items move once into a session named `جرد سابق` (created now); the legacy key is then removed. Empty/missing legacy → no session created.
+- Legacy migration: existing `inventory_items_v1` items move once into a session named `جرد سابق` (created now); the legacy key is then removed. Empty/missing legacy → no session created. Corrupt (unparseable/non-array) legacy → quarantined to `inventory_items_v1_corrupt_<ts>`, existing sessions kept untouched.
+- Failed session delete rolls back in-memory state and re-renders (no storage/memory divergence).
 
 ## Architecture
 - No build step, no server, no dependencies.

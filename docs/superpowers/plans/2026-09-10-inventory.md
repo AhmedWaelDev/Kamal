@@ -2013,3 +2013,153 @@ git commit -m "feat: wire home/detail views, session totals, migration"
 Use `git -c user.name="opencode" -c user.email="opencode@local"` flags if git identity is not configured. Stage ONLY `app.js`.
 
 **6. Amendment (Tasks 10–12) self-check:** Task 10 tests pin `autoSessionName` disambiguation (`(2)`, `(3)`), `sessionTotals` arithmetic (1100/1380/280), 14 `timeAgo` boundary strings incl. dual/plural Arabic forms and the 60-day date fallback (`يوم 12/7/2026` = Sep 10 minus 60 days), storage round-trip + `SESSIONS_KEY` value pin, and all four `migrateLegacy` branches (items→`جرد سابق` + key removal + sessions saved; missing key; empty array); `Date(2026, 8, …)` constructors keep date math timezone-local on both sides so asserts hold anywhere; Task 11 keeps all 13 old IDs byte-identical and adds 15 new ones with `hidden` on `detail-view`; Task 12 `openSession` copies items (`slice`) so detail edits can't alias stored state, every mutation write-throughs the whole sessions array, `renderTotals` derives from `sessionTotals` (single source with the footer), delete-session failure rolls back via `alert` + early return, failed session creation rolls back the unshift; legacy `loadItems`/`saveItems` remain exported for their untouched tests.
+
+---
+
+### Task 13 (Review follow-ups): rollback failed session delete, quarantine corrupt legacy
+
+**Rationale:** Task 12 quality review found two error-path bugs: (1) failed session-delete `alert`s and returns WITHOUT restoring `sessions` or re-rendering — memory/storage diverge until reload (and the self-check line above describing a rollback was inaccurate for the delete path); (2) corrupt legacy JSON makes `migrateLegacy` throw, so `boot` backs up the wrong key and discards all valid sessions.
+
+**Files:**
+- Modify: `logic.js` (1 exact edit: quarantine branch in `migrateLegacy`)
+- Modify: `tests/logic.test.js` (append 1 test, keep existing 19)
+- Modify: `app.js` (1 exact edit: delete-handler rollback)
+- Test: `tests/logic.test.js`
+
+- [ ] **Step 1: Append the quarantine test (keep existing 19)**
+
+Append exactly this block to the end of `tests/logic.test.js`:
+
+```js
+test('migrateLegacy quarantines corrupt legacy and keeps sessions', () => {
+  const { migrateLegacy, LEGACY_KEY, SESSIONS_KEY } = require('../logic.js');
+  const mem = {};
+  const fake = {
+    getItem: (k) => (k in mem ? mem[k] : null),
+    setItem: (k, v) => { mem[k] = String(v); },
+    removeItem: (k) => { delete mem[k]; }
+  };
+  const day = new Date(2026, 8, 10, 12, 0, 0).getTime();
+  const sessions = [{ id: 's1', name: 'جرد يوم 8/9/2026', createdAt: 1, items: [] }];
+  fake.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+  fake.setItem(LEGACY_KEY, '{oops');
+  const out = migrateLegacy(fake, day);
+  assert.deepEqual(out, sessions);
+  assert.equal(fake.getItem(LEGACY_KEY), null);
+  assert.equal(fake.getItem(LEGACY_KEY + '_corrupt_' + day), '{oops');
+  assert.deepEqual(JSON.parse(fake.getItem(SESSIONS_KEY)), sessions);
+});
+```
+
+- [ ] **Step 2: Run tests to verify the new one fails**
+
+Run: `node --test tests/logic.test.js`
+Expected: FAIL — the quarantine test throws `SyntaxError` from `JSON.parse(raw)` (existing 19 pass, 1 new fails).
+
+- [ ] **Step 3: Quarantine branch in `migrateLegacy` (1 exact edit)**
+
+In `logic.js`, replace exactly:
+
+```js
+function migrateLegacy(storage, now) {
+  const sessions = loadSessions(storage);
+  const raw = storage.getItem(LEGACY_KEY);
+  if (raw === null || raw === undefined) {
+    return sessions;
+  }
+  const items = JSON.parse(raw);
+  if (Array.isArray(items) && items.length > 0) {
+    const t = now === undefined ? Date.now() : now;
+    sessions.unshift({ id: makeId(), name: 'جرد سابق', createdAt: t, items });
+  }
+  storage.removeItem(LEGACY_KEY);
+  saveSessions(storage, sessions);
+  return sessions;
+}
+```
+
+with exactly:
+
+```js
+function migrateLegacy(storage, now) {
+  const sessions = loadSessions(storage);
+  const raw = storage.getItem(LEGACY_KEY);
+  if (raw === null || raw === undefined) {
+    return sessions;
+  }
+  const t = now === undefined ? Date.now() : now;
+  let items = null;
+  try {
+    items = JSON.parse(raw);
+  } catch (e) {
+    items = null;
+  }
+  if (Array.isArray(items) && items.length > 0) {
+    sessions.unshift({ id: makeId(), name: 'جرد سابق', createdAt: t, items });
+  } else if (!Array.isArray(items)) {
+    storage.setItem(LEGACY_KEY + '_corrupt_' + t, raw);
+  }
+  storage.removeItem(LEGACY_KEY);
+  saveSessions(storage, sessions);
+  return sessions;
+}
+```
+
+Nothing else in `logic.js` changes.
+
+- [ ] **Step 4: Rollback in the delete-session handler (1 exact edit)**
+
+In `app.js`, replace exactly:
+
+```js
+      del.addEventListener('click', () => {
+        if (!window.confirm('حذف "' + s.name + '"؟')) {
+          return;
+        }
+        sessions = sessions.filter((x) => x.id !== s.id);
+        try {
+          persistSessions();
+        } catch (err) {
+          window.alert('تعذر الحفظ في المتصفح: ' + err.message);
+          return;
+        }
+        renderHome();
+      });
+```
+
+with exactly:
+
+```js
+      del.addEventListener('click', () => {
+        if (!window.confirm('حذف "' + s.name + '"؟')) {
+          return;
+        }
+        const kept = sessions;
+        sessions = sessions.filter((x) => x.id !== s.id);
+        try {
+          persistSessions();
+        } catch (err) {
+          sessions = kept;
+          window.alert('تعذر الحفظ في المتصفح: ' + err.message);
+        }
+        renderHome();
+      });
+```
+
+Nothing else in `app.js` changes.
+
+- [ ] **Step 5: Run tests — expect 20 passing**
+
+Run: `node --test tests/logic.test.js`
+Expected: PASS, 20 passing, 0 failing.
+
+- [ ] **Step 6: Commit all three files together**
+
+```bash
+git add logic.js tests/logic.test.js app.js
+git commit -m "fix: rollback failed session delete, quarantine corrupt legacy data"
+```
+
+Use `git -c user.name="opencode" -c user.email="opencode@local"` flags if git identity is not configured. Stage ONLY those three files.
+
+**7. Amendment (Task 13) self-check:** quarantine preserves the corrupt bytes under a timestamped key, keeps valid sessions, still removes the legacy key and still saves; empty-array and missing-key branches behave exactly as before (all Task 10 asserts re-verified by the untouched 19); delete rollback restores the same array reference (`kept`) and always re-renders, so UI/memory/storage agree on both paths; no new IDs, classes, exports, or user-visible strings.
