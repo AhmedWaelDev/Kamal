@@ -20,7 +20,7 @@ Simple Arabic RTL website to track shop inventory: a home screen with saved inve
 ## Architecture
 - No build step, no server, no dependencies.
 - Files:
-  - `index.html` — RTL (`dir="rtl" lang="ar"`), header, `#home-view` (new-session button, sessions list, empty state) + `#detail-view` (back button, session title, search input, item form, totals cards, table with `tfoot` totals row, empty state), footer note.
+  - `index.html` — RTL (`dir="rtl" lang="ar"`), header, `#home-view` (new-session button, sessions list, empty state) + `#detail-view` (header row with ghost back button + session title, item form card, standalone search card, totals cards, table with `tfoot` totals row, empty state), footer note.
   - `styles.css` — clean readable styling, red/green net profit, responsive table scroll on mobile; session cards, totals cards, single-column phone layout.
   - `app.js` — home/detail view switching, session CRUD, item CRUD scoped to the open session, search, totals rendering, persistence.
   - `logic.js` — pure functions incl. session helpers (`autoSessionName`, `createSession`, `sessionTotals`, `timeAgo`), storage helpers, migration.
@@ -58,6 +58,10 @@ Item = {
 // paid is computed at create/update time via calcPaid and stored; validation ignores any caller-supplied paidAmount.
 ```
 // Display: whole numbers when exact, up to 2 decimals otherwise (`250` not `250.00`; `15.5`, `10.25` kept), EGP suffix. Example: commercial 100, selling 130, qty 10 → paid 1000, total 1300, net 300.
+
+## Detail header & search placement (amended, Task 14)
+- Detail header is one row: ghost back button (`→ الرئيسية`, white bg, bordered) + session title sharing the row — no floating gray pill.
+- Search lives in its own card between the form card and the totals cards (order: form → search → totals → table).
 
 ## Layout & Responsive (amended)
 - Form grid inputs must shrink: grid children `min-width: 0`, inputs `width: 100%` — no overflow outside the card on desktop, no page-level horizontal scroll on mobile.

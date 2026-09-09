@@ -2163,3 +2163,115 @@ git commit -m "fix: rollback failed session delete, quarantine corrupt legacy da
 Use `git -c user.name="opencode" -c user.email="opencode@local"` flags if git identity is not configured. Stage ONLY those three files.
 
 **7. Amendment (Task 13) self-check:** quarantine preserves the corrupt bytes under a timestamped key, keeps valid sessions, still removes the legacy key and still saves; empty-array and missing-key branches behave exactly as before (all Task 10 asserts re-verified by the untouched 19); delete rollback restores the same array reference (`kept`) and always re-renders, so UI/memory/storage agree on both paths; no new IDs, classes, exports, or user-visible strings.
+
+---
+
+### Task 14 (Amendment): Polish back button, move search above totals
+
+**Rationale (user feedback with mobile screenshot):** (1) the gray `#back-btn` pill floating above the title looks bad; (2) search should sit in its own card between the form card and the totals cards (order: form → search → totals → table). No JS/ID/logic changes — `app.js` and tests untouched.
+
+**Files:**
+- Modify: `index.html` (2 exact edits)
+- Modify: `styles.css` (1 exact edit replacing 2 adjacent rules)
+- Test: `tests/logic.test.js` (regression, no new tests)
+
+- [ ] **Step 1: Restructure the detail header in `index.html` (edit 1 of 2)**
+
+Replace exactly:
+
+```html
+    <section id="detail-view" hidden>
+      <button id="back-btn" type="button">→ الرئيسية</button>
+      <h2 id="session-title"></h2>
+      <section class="card">
+        <div class="search-row">
+          <input id="search-input" type="search" placeholder="بحث باسم الصنف..." autocomplete="off">
+          <span id="items-count"></span>
+        </div>
+        <form id="item-form">
+```
+
+with exactly:
+
+```html
+    <section id="detail-view" hidden>
+      <div class="detail-head">
+        <button id="back-btn" type="button">→ الرئيسية</button>
+        <h2 id="session-title"></h2>
+      </div>
+      <section class="card">
+        <form id="item-form">
+```
+
+- [ ] **Step 2: Move the search row into its own card above totals (edit 2 of 2)**
+
+Replace exactly:
+
+```html
+          <div class="form-actions">
+            <button id="submit-btn" type="submit">إضافة</button>
+            <button id="cancel-edit-btn" type="button" hidden>إلغاء التعديل</button>
+          </div>
+        </form>
+      </section>
+
+      <div class="totals-cards">
+```
+
+with exactly:
+
+```html
+          <div class="form-actions">
+            <button id="submit-btn" type="submit">إضافة</button>
+            <button id="cancel-edit-btn" type="button" hidden>إلغاء التعديل</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card search-card">
+        <div class="search-row">
+          <input id="search-input" type="search" placeholder="بحث باسم الصنف..." autocomplete="off">
+          <span id="items-count"></span>
+        </div>
+      </section>
+
+      <div class="totals-cards">
+```
+
+- [ ] **Step 3: Header + search-card styles in `styles.css` (1 exact edit)**
+
+Replace exactly:
+
+```css
+#back-btn { background: #6b7280; margin-bottom: 12px; }
+#session-title { font-size: 20px; margin: 0 0 12px; }
+```
+
+with exactly:
+
+```css
+.detail-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+#back-btn { background: #fff; color: #111827; border: 1px solid #d1d5db; padding: 8px 14px; font-size: 14px; flex-shrink: 0; }
+#back-btn:hover { background: #f3f4f6; }
+#session-title { font-size: 20px; margin: 0; flex: 1; min-width: 0; }
+.search-card .search-row { margin-bottom: 0; }
+```
+
+Nothing else in `styles.css` changes.
+
+- [ ] **Step 4: Verify (adapt quoting for PowerShell if needed, same conditions)**
+
+Check A — `index.html`: contains `class="detail-head"`, `class="card search-card"`; `search-input` occurs exactly once; document order is form card (`item-form`) → search card (`search-card`) → totals (`totals-cards`) → table (`items-tbody`) — verify by string offsets in that order; all 28 IDs still present exactly once each (13 old + 15 Task 11 IDs); script order still `logic.js` before `app.js`.
+Check B — `styles.css`: contains `.detail-head`, `#back-btn:hover`, `.search-card .search-row`; no longer contains `background: #6b7280` for `#back-btn` (the exact old rule is gone); regression `node --test tests/logic.test.js` → PASS, 20/0.
+Expected: both checks pass.
+
+- [ ] **Step 5: Commit both files together**
+
+```bash
+git add index.html styles.css
+git commit -m "feat: polish back button into header row, move search above totals"
+```
+
+Use `git -c user.name="opencode" -c user.email="opencode@local"` flags if git identity is not configured. Stage ONLY those two files. (`app.js` needs no changes — all IDs preserved.)
+
+**8. Amendment (Task 14) self-check:** header row is flex with `min-width: 0` on the title so long session names shrink instead of pushing the back button off-screen; ghost button keeps `type="button"` (no accidental submits) and its own `:hover` beats the generic blue `button:hover` by ID specificity; search keeps its single input instance (no duplicate-ID risk) with count attached; `search-card` neutralizes the row's bottom margin so the card doesn't double-space; `app.js` untouched because every consumed ID survives at the same spelling — verified by Check A.
