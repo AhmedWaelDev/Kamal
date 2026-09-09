@@ -9,7 +9,7 @@ Simple Arabic RTL website to track shop inventory: add/edit/delete items, live s
 - Approach: Option 1 — single-file-ish static site, no build, no backend (user chose 1 over export/print and backend options)
 - Features in scope: add, edit, delete, search. Out of scope for v1: totals footer row, export/import, print, auth, multi-device sync.
 - Storage: `localStorage` only.
-- Formulas (fully automatic, user-approved): `total = sellingPrice * quantity`, `net = total - (commercialPrice * quantity)`, `paidAmount` tracked manually per item, not part of net formula.
+- Formulas (fully automatic, user-approved; amended: paid is auto-computed, not manual): `paid = commercialPrice * quantity` (auto, readonly in form, live-updating), `total = sellingPrice * quantity`, `net = total - paid` (equivalently `total - (commercialPrice * quantity)`).
 
 ## Architecture
 - No build step, no server, no dependencies.
@@ -21,7 +21,7 @@ Simple Arabic RTL website to track shop inventory: add/edit/delete items, live s
 - Runs by opening `index.html` directly or any static host. Works offline after first load.
 
 ## Components
-1. **ItemForm** — inputs: name (text, required), commercialPrice (number >= 0), sellingPrice (number >= 0), quantity (integer >= 0), paidAmount (number >= 0). Buttons: Add / Save-edit / Cancel-edit. Shows inline validation errors.
+1. **ItemForm** — inputs: name (text, required), commercialPrice (number >= 0), sellingPrice (number >= 0), quantity (integer >= 0); paidAmount is a readonly auto field (`paid = commercialPrice * quantity`) that live-updates on commercial/quantity input. Buttons: Add / Save-edit / Cancel-edit. Shows inline validation errors.
 2. **SearchBar** — text input, live filter on item name, Arabic case-insensitive, trim.
 3. **ItemsTable** — columns: اسم الصنف, السعر التجاري, سعر البيع, الكمية, السعر المدفوع, سعر البيع الاجمالي (computed), صافي المكسب (computed), actions (تعديل/حذف). Negative net in red, positive in green. Row count + empty-state row when no matches.
 4. **Store** — `load()`, `save(items)`, corrupt-data recovery (backup to `inventory_items_v1_corrupt_<timestamp>` then reset to `[]` with notice).
@@ -34,14 +34,15 @@ Item = {
   commercialPrice: number, // >= 0
   sellingPrice: number,    // >= 0
   quantity: number,        // integer >= 0
-  paidAmount: number,      // >= 0, informational only
+  paidAmount: number,      // auto-computed = commercialPrice * quantity, stored per item
   createdAt: number        // timestamp
 }
 // Computed at render (never stored):
 // total = sellingPrice * quantity
-// net   = total - (commercialPrice * quantity)
+// net   = total - (commercialPrice * quantity)  [= total - paid]
+// paid is computed at create/update time via calcPaid and stored; validation ignores any caller-supplied paidAmount.
 ```
-- Display: 2 decimals, EGP suffix. Example: commercial 100, selling 130, qty 10 → total 1300, net 300.
+// Display: 2 decimals, EGP suffix. Example: commercial 100, selling 130, qty 10 → paid 1000, total 1300, net 300.
 
 ## Data Flow
 1. Load: on start, read `localStorage`, parse, validate array, render.
