@@ -1,7 +1,7 @@
 # Inventory App Design (Jard) — 2026-09-10
 
 ## Goal
-Simple Arabic RTL website to track shop inventory: add/edit/delete items, live search, automatic totals and net profit, persisted in the browser.
+Simple Arabic RTL website to track shop inventory: a home screen with saved inventory sessions (new/open/delete, Arabic relative timestamps), and per-session pages to add/edit/delete items with live search, automatic per-item math plus session-wide totals (paid/selling/net) as summary cards and a table footer row, persisted in the browser.
 
 ## Decisions (from brainstorming)
 - Type: static website, Arabic RTL, single user, same device/browser
@@ -10,24 +10,38 @@ Simple Arabic RTL website to track shop inventory: add/edit/delete items, live s
 - Features in scope: add, edit, delete, search. Out of scope for v1: totals footer row, export/import, print, auth, multi-device sync.
 - Storage: `localStorage` only.
 - Formulas (fully automatic, user-approved; amended: paid is auto-computed, not manual): `paid = commercialPrice * quantity` (auto, readonly in form, live-updating), `total = sellingPrice * quantity`, `net = total - paid` (equivalently `total - (commercialPrice * quantity)`).
+- Sessions (Task 10, user-approved): home screen with [+ جرد جديد] button and saved-session cards (newest first), each showing auto name + Arabic relative time + item count; click opens (full editing), 🗑️ deletes with confirm. No rename (YAGNI).
+- Session auto-naming: `جرد يوم D/M/YYYY` (e.g. `جرد يوم 8/9/2026`), suffixed ` (2)`, ` (3)`… when the name exists.
+- Relative time (Arabic): `الآن` (<1 min), `منذ دقيقة/دقيقتين/N دقائق/N دقيقة`, `منذ ساعة/ساعتين/N ساعات/N ساعة`, `منذ يوم/يومين/N أيام/N يوم`, `منذ أسبوع/أسبوعين/N أسابيع/N أسبوع`, older → `يوم D/M/YYYY`.
+- Session totals (user chose cards + footer row): 3 summary cards above the table (paid/selling/net, net green/red) plus a bold `الإجمالي` footer row (item count + the 3 sums). Totals = sums of per-item computed values, formatted with `formatMoney`.
+- Legacy migration: existing `inventory_items_v1` items move once into a session named `جرد سابق` (created now); the legacy key is then removed. Empty/missing legacy → no session created.
 
 ## Architecture
 - No build step, no server, no dependencies.
 - Files:
-  - `index.html` — RTL (`dir="rtl" lang="ar"`), header, search input, item form, table, empty state, footer note.
-  - `styles.css` — clean readable styling, red/green net profit, responsive table scroll on mobile.
-  - `app.js` — state, rendering, CRUD, search, persistence.
-- Storage key: `inventory_items_v1` (JSON array). Each write replaces whole array immediately (write-through).
+  - `index.html` — RTL (`dir="rtl" lang="ar"`), header, `#home-view` (new-session button, sessions list, empty state) + `#detail-view` (back button, session title, search input, item form, totals cards, table with `tfoot` totals row, empty state), footer note.
+  - `styles.css` — clean readable styling, red/green net profit, responsive table scroll on mobile; session cards, totals cards, single-column phone layout.
+  - `app.js` — home/detail view switching, session CRUD, item CRUD scoped to the open session, search, totals rendering, persistence.
+  - `logic.js` — pure functions incl. session helpers (`autoSessionName`, `createSession`, `sessionTotals`, `timeAgo`), storage helpers, migration.
+- Storage keys: `inventory_sessions_v1` (JSON array of sessions). Each write replaces whole array immediately (write-through). Legacy `inventory_items_v1` is migrated once (see above) then removed.
 - Runs by opening `index.html` directly or any static host. Works offline after first load.
 
 ## Components
 1. **ItemForm** — inputs: name (text, required), commercialPrice (number >= 0), sellingPrice (number >= 0), quantity (integer >= 0); paidAmount is a readonly auto field (`paid = commercialPrice * quantity`) that live-updates on commercial/quantity input. Buttons: Add / Save-edit / Cancel-edit. Shows inline validation errors.
 2. **SearchBar** — text input, live filter on item name, Arabic case-insensitive, trim.
-3. **ItemsTable** — columns: اسم الصنف, السعر التجاري, سعر البيع, الكمية, السعر المدفوع, سعر البيع الاجمالي (computed), صافي المكسب (computed), actions (تعديل/حذف). Negative net in red, positive in green. Row count + empty-state row when no matches.
+3. **ItemsTable** — columns: اسم الصنف, السعر التجاري, سعر البيع, الكمية, السعر المدفوع, سعر البيع الاجمالي (computed), صافي المكسب (computed), actions (تعديل/حذف). Negative net in red, positive in green. Row count + empty-state row when no matches. Bold `الإجمالي` footer row with item count + the 3 session sums.
+4. **SessionList (home)** — [+ جرد جديد] button; session cards (name, `timeAgo • N أصناف`, delete with confirm); empty-state text; home error line for storage failures.
+5. **TotalsCards (detail)** — 3 cards (المدفوع للكل / البيع الإجمالي للكل / الصافي للكل) refreshed on every render; net card green/red.
 4. **Store** — `load()`, `save(items)`, corrupt-data recovery (backup to `inventory_items_v1_corrupt_<timestamp>` then reset to `[]` with notice).
 
 ## Data Model
 ```js
+Session = {
+  id: string,          // makeId()
+  name: string,        // autoSessionName(), e.g. 'جرد يوم 8/9/2026'
+  createdAt: number,   // timestamp
+  items: Item[]        // same Item shape as before
+}
 Item = {
   id: string,          // crypto.randomUUID() or Date.now fallback
   name: string,        // required, trimmed, non-empty
@@ -50,12 +64,12 @@ Item = {
 - Inputs use 16px font (prevents iOS auto-zoom on focus).
 
 ## Data Flow
-1. Load: on start, read `localStorage`, parse, validate array, render.
-2. Add: validate form → create item with id → unshift/append → save → re-render + clear form.
-3. Edit: click تعديل → populate form, switch to edit mode → Save validates → update by id → save → re-render, or Cancel exits edit mode.
-4. Delete: click حذف → `confirm()` → remove by id → save → re-render.
-5. Search: input event → filter by normalized name substring → render filtered list (store keeps full list).
-6. Every mutation persists synchronously before re-render.
+1. Load: on start, `migrateLegacy()` (once) then `loadSessions()`, render home. Corrupt sessions JSON → backup + reset with notice on home.
+2. New inventory: `createSession()` → unshift → save → open detail (empty form/table, zeroed totals).
+3. Open session: copy its items into the detail editor; all item mutations save the whole sessions array (write-through); totals re-render every time.
+4. Delete session: confirm → remove → save → re-render home.
+5. Back: detail → home (no save needed; everything already persisted).
+6. Item flows (scoped to the open session): add (validate → create with id → save → re-render + clear), edit (fill form → save/cancel), delete (confirm → remove), search (live filter), every mutation persists synchronously before re-render.
 
 ## Error Handling / Edge Cases
 - Empty name → block with message "اسم الصنف مطلوب".

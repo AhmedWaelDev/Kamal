@@ -1204,3 +1204,804 @@ git commit -m "feat: fix form overflow, mobile layout, whole-number money format
 Use `git -c user.name="opencode" -c user.email="opencode@local"` flags if git identity is not configured. Stage ONLY those four files.
 
 **5. Amendment (Task 9) self-check:** shrink fix (`min-width: 0` on labels/inputs + `width: 100%`) addresses the desktop overflow and the mobile page-width blowout at the root; breakpoints chosen so 375px phones get a single column (no squeeze) while tablets keep 2; `formatMoney` rounds to cents then relies on `String()` to drop trailing zeros — `250`→`"250"`, `15.5`→`"15.5"`, `-20`→`"-20"`; `String(-0)` is `"0"` so no negative-zero display; old tests unaffected (none assert on `toFixed` output or font sizes); `index.html` untouched so all 13 IDs and script order intact.
+
+---
+
+### Task 10: Session logic with tests (no UI)
+
+**Files:**
+- Modify: `tests/logic.test.js` (append 6 tests, keep existing 13)
+- Modify: `logic.js` (append session helpers + extend exports, touch nothing else)
+- Test: `tests/logic.test.js`
+
+- [ ] **Step 1: Append the 6 session tests (keep existing 13)**
+
+Append exactly this block to the end of `tests/logic.test.js`:
+
+```js
+test('autoSessionName uses date and disambiguates', () => {
+  const { autoSessionName } = require('../logic.js');
+  const day = new Date(2026, 8, 8, 12, 0, 0).getTime();
+  assert.equal(autoSessionName([], day), 'جرد يوم 8/9/2026');
+  const one = [{ name: 'جرد يوم 8/9/2026' }];
+  assert.equal(autoSessionName(one, day), 'جرد يوم 8/9/2026 (2)');
+  const two = [{ name: 'جرد يوم 8/9/2026' }, { name: 'جرد يوم 8/9/2026 (2)' }];
+  assert.equal(autoSessionName(two, day), 'جرد يوم 8/9/2026 (3)');
+});
+
+test('createSession builds an empty dated session', () => {
+  const { createSession } = require('../logic.js');
+  const day = new Date(2026, 8, 8, 12, 0, 0).getTime();
+  const s = createSession([], day);
+  assert.equal(s.name, 'جرد يوم 8/9/2026');
+  assert.equal(typeof s.id, 'string');
+  assert.equal(s.createdAt, day);
+  assert.deepEqual(s.items, []);
+});
+
+test('sessionTotals sums paid, total and net', () => {
+  const { sessionTotals } = require('../logic.js');
+  const t = sessionTotals({ items: [
+    { commercialPrice: 100, sellingPrice: 130, quantity: 10 },
+    { commercialPrice: 50, sellingPrice: 40, quantity: 2 }
+  ] });
+  assert.equal(t.paid, 1100);
+  assert.equal(t.total, 1380);
+  assert.equal(t.net, 280);
+});
+
+test('timeAgo formats Arabic relative time', () => {
+  const { timeAgo } = require('../logic.js');
+  const now = new Date(2026, 8, 10, 12, 0, 0).getTime();
+  const min = 60000, hour = 3600000, day = 86400000;
+  assert.equal(timeAgo(now - 30 * 1000, now), 'الآن');
+  assert.equal(timeAgo(now - 1 * min, now), 'منذ دقيقة');
+  assert.equal(timeAgo(now - 2 * min, now), 'منذ دقيقتين');
+  assert.equal(timeAgo(now - 5 * min, now), 'منذ 5 دقائق');
+  assert.equal(timeAgo(now - 15 * min, now), 'منذ 15 دقيقة');
+  assert.equal(timeAgo(now - 1 * hour, now), 'منذ ساعة');
+  assert.equal(timeAgo(now - 2 * hour, now), 'منذ ساعتين');
+  assert.equal(timeAgo(now - 5 * hour, now), 'منذ 5 ساعات');
+  assert.equal(timeAgo(now - 1 * day, now), 'منذ يوم');
+  assert.equal(timeAgo(now - 2 * day, now), 'منذ يومين');
+  assert.equal(timeAgo(now - 4 * day, now), 'منذ 4 أيام');
+  assert.equal(timeAgo(now - 10 * day, now), 'منذ أسبوع');
+  assert.equal(timeAgo(now - 20 * day, now), 'منذ أسبوعين');
+  assert.equal(timeAgo(now - 60 * day, now), 'يوم 12/7/2026');
+});
+
+test('sessions save/load round-trip and reject corrupt JSON', () => {
+  const { saveSessions, loadSessions, SESSIONS_KEY } = require('../logic.js');
+  assert.equal(SESSIONS_KEY, 'inventory_sessions_v1');
+  const mem = {};
+  const fake = {
+    getItem: (k) => (k in mem ? mem[k] : null),
+    setItem: (k, v) => { mem[k] = String(v); },
+    removeItem: (k) => { delete mem[k]; }
+  };
+  assert.deepEqual(loadSessions(fake), []);
+  const sessions = [{ id: 's1', name: 'جرد يوم 8/9/2026', createdAt: 1, items: [] }];
+  saveSessions(fake, sessions);
+  assert.deepEqual(loadSessions(fake), sessions);
+  assert.throws(() => loadSessions({ getItem: () => '{oops', setItem: () => {}, removeItem: () => {} }), SyntaxError);
+});
+
+test('migrateLegacy moves old items once into جرد سابق', () => {
+  const { migrateLegacy, LEGACY_KEY, SESSIONS_KEY } = require('../logic.js');
+  function makeFake(seed) {
+    const mem = Object.assign({}, seed);
+    return {
+      mem,
+      getItem: (k) => (k in mem ? mem[k] : null),
+      setItem: (k, v) => { mem[k] = String(v); },
+      removeItem: (k) => { delete mem[k]; }
+    };
+  }
+  const day = new Date(2026, 8, 10, 12, 0, 0).getTime();
+  const items = [{ id: 'a', name: 'شاي', commercialPrice: 1, sellingPrice: 2, quantity: 3, paidAmount: 3, createdAt: 1 }];
+  const f1 = makeFake({ [LEGACY_KEY]: JSON.stringify(items) });
+  const out = migrateLegacy(f1, day);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].name, 'جرد سابق');
+  assert.deepEqual(out[0].items, items);
+  assert.equal(f1.getItem(LEGACY_KEY), null);
+  assert.deepEqual(JSON.parse(f1.getItem(SESSIONS_KEY)), out);
+  const f2 = makeFake({});
+  assert.deepEqual(migrateLegacy(f2, day), []);
+  const f3 = makeFake({ [LEGACY_KEY]: JSON.stringify([]) });
+  assert.deepEqual(migrateLegacy(f3, day), []);
+  assert.equal(f3.getItem(LEGACY_KEY), null);
+});
+```
+
+- [ ] **Step 2: Run tests to verify the new ones fail**
+
+Run: `node --test tests/logic.test.js`
+Expected: FAIL — `autoSessionName is not a function` first (existing 13 pass, 6 new fail).
+
+- [ ] **Step 3: Append session helpers to `logic.js` (insert + exports only)**
+
+Insert exactly this block immediately before the line `if (typeof module !== 'undefined' && module.exports) {`:
+
+```js
+function formatDate(d) {
+  return d.getDate() + '/' + (d.getMonth() + 1) + '/' + d.getFullYear();
+}
+
+function autoSessionName(sessions, now) {
+  const base = 'جرد يوم ' + formatDate(new Date(now));
+  const names = {};
+  sessions.forEach((s) => { names[s.name] = true; });
+  if (!names[base]) {
+    return base;
+  }
+  let i = 2;
+  while (names[base + ' (' + i + ')']) {
+    i++;
+  }
+  return base + ' (' + i + ')';
+}
+
+function createSession(sessions, now) {
+  const t = now === undefined ? Date.now() : now;
+  return { id: makeId(), name: autoSessionName(sessions, t), createdAt: t, items: [] };
+}
+
+function sessionTotals(session) {
+  let paid = 0;
+  let total = 0;
+  let net = 0;
+  session.items.forEach((it) => {
+    paid += calcPaid(it.commercialPrice, it.quantity);
+    total += calcTotal(it.sellingPrice, it.quantity);
+    net += calcNet(it.commercialPrice, it.sellingPrice, it.quantity);
+  });
+  return { paid, total, net };
+}
+
+function arUnit(n, one, two, few, many) {
+  if (n === 1) {
+    return 'منذ ' + one;
+  }
+  if (n === 2) {
+    return 'منذ ' + two;
+  }
+  if (n <= 10) {
+    return 'منذ ' + n + ' ' + few;
+  }
+  return 'منذ ' + n + ' ' + many;
+}
+
+function timeAgo(ts, now) {
+  const t = now === undefined ? Date.now() : now;
+  const diff = Math.max(0, t - ts);
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) {
+    return 'الآن';
+  }
+  if (minutes < 60) {
+    return arUnit(minutes, 'دقيقة', 'دقيقتين', 'دقائق', 'دقيقة');
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return arUnit(hours, 'ساعة', 'ساعتين', 'ساعات', 'ساعة');
+  }
+  const days = Math.floor(hours / 24);
+  if (days < 7) {
+    return arUnit(days, 'يوم', 'يومين', 'أيام', 'يوم');
+  }
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) {
+    return arUnit(weeks, 'أسبوع', 'أسبوعين', 'أسابيع', 'أسبوع');
+  }
+  return 'يوم ' + formatDate(new Date(ts));
+}
+
+const SESSIONS_KEY = 'inventory_sessions_v1';
+const LEGACY_KEY = 'inventory_items_v1';
+
+function loadSessions(storage) {
+  const raw = storage.getItem(SESSIONS_KEY);
+  if (raw === null || raw === undefined) {
+    return [];
+  }
+  const parsed = JSON.parse(raw);
+  if (!Array.isArray(parsed)) {
+    throw new SyntaxError('stored sessions is not an array');
+  }
+  return parsed;
+}
+
+function saveSessions(storage, sessions) {
+  storage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+}
+
+function migrateLegacy(storage, now) {
+  const sessions = loadSessions(storage);
+  const raw = storage.getItem(LEGACY_KEY);
+  if (raw === null || raw === undefined) {
+    return sessions;
+  }
+  const items = JSON.parse(raw);
+  if (Array.isArray(items) && items.length > 0) {
+    const t = now === undefined ? Date.now() : now;
+    sessions.unshift({ id: makeId(), name: 'جرد سابق', createdAt: t, items });
+  }
+  storage.removeItem(LEGACY_KEY);
+  saveSessions(storage, sessions);
+  return sessions;
+}
+```
+
+Then replace the exports line with exactly:
+
+```js
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { calcTotal, calcNet, calcPaid, validateItem, createItem, filterItems, loadItems, saveItems, STORAGE_KEY, formatMoney, formatDate, autoSessionName, createSession, sessionTotals, timeAgo, SESSIONS_KEY, LEGACY_KEY, loadSessions, saveSessions, migrateLegacy };
+}
+```
+
+Do not touch any other line in `logic.js` (`loadItems`/`saveItems`/`STORAGE_KEY` stay for their tests).
+
+- [ ] **Step 4: Run tests — expect 19 passing**
+
+Run: `node --test tests/logic.test.js`
+Expected: PASS, 19 passing, 0 failing.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add logic.js tests/logic.test.js
+git commit -m "feat: add inventory session logic, totals, relative time, migration"
+```
+
+Use `git -c user.name="opencode" -c user.email="opencode@local"` flags if git identity is not configured. Stage ONLY those two files.
+
+---
+
+### Task 11: Home/detail markup and styles (no JS logic)
+
+**Files:**
+- Modify: `index.html` (full replace — exact content in Step 1)
+- Modify: `styles.css` (full replace — exact content in Step 2)
+
+- [ ] **Step 1: Replace `index.html` with the two-view structure**
+
+Replace the FULL content of `index.html` with exactly this content (all 13 old IDs intact in place; 15 new IDs: `home-view`, `new-session-btn`, `home-error`, `sessions-list`, `sessions-empty`, `detail-view`, `back-btn`, `session-title`, `total-paid`, `total-sell`, `total-net`, `foot-count`, `foot-paid`, `foot-total`, `foot-net`; script order unchanged):
+
+```html
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>برنامج الجرد</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="container">
+    <h1>برنامج الجرد</h1>
+
+    <section id="home-view">
+      <button id="new-session-btn" type="button">+ جرد جديد</button>
+      <p id="home-error" class="error" hidden></p>
+      <div id="sessions-list"></div>
+      <p id="sessions-empty" class="muted">لا توجد جوارد محفوظة — ابدأ جرد جديد.</p>
+    </section>
+
+    <section id="detail-view" hidden>
+      <button id="back-btn" type="button">→ الرئيسية</button>
+      <h2 id="session-title"></h2>
+      <section class="card">
+        <div class="search-row">
+          <input id="search-input" type="search" placeholder="بحث باسم الصنف..." autocomplete="off">
+          <span id="items-count"></span>
+        </div>
+        <form id="item-form">
+          <div class="form-grid">
+            <label>اسم الصنف<input id="field-name" type="text" required></label>
+            <label>السعر التجاري<input id="field-commercial" type="number" min="0" step="any" value="0"></label>
+            <label>سعر البيع<input id="field-selling" type="number" min="0" step="any" value="0"></label>
+            <label>الكمية<input id="field-qty" type="number" min="0" step="1" value="0"></label>
+            <label>السعر المدفوع (تلقائي)<input id="field-paid" type="number" min="0" step="any" value="0" readonly></label>
+          </div>
+          <p id="form-error" class="error" hidden></p>
+          <div class="form-actions">
+            <button id="submit-btn" type="submit">إضافة</button>
+            <button id="cancel-edit-btn" type="button" hidden>إلغاء التعديل</button>
+          </div>
+        </form>
+      </section>
+
+      <div class="totals-cards">
+        <div class="total-card">
+          <span class="total-label">المدفوع للكل</span>
+          <span id="total-paid" class="total-value"></span>
+        </div>
+        <div class="total-card">
+          <span class="total-label">البيع الإجمالي للكل</span>
+          <span id="total-sell" class="total-value"></span>
+        </div>
+        <div class="total-card">
+          <span class="total-label">الصافي للكل</span>
+          <span id="total-net" class="total-value"></span>
+        </div>
+      </div>
+
+      <section class="card table-card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>اسم الصنف</th>
+                <th>السعر التجاري</th>
+                <th>سعر البيع</th>
+                <th>الكمية</th>
+                <th>السعر المدفوع</th>
+                <th>سعر البيع الاجمالي</th>
+                <th>صافي المكسب</th>
+                <th>إجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="items-tbody"></tbody>
+            <tfoot>
+              <tr id="totals-foot">
+                <td>الإجمالي</td>
+                <td></td>
+                <td></td>
+                <td id="foot-count"></td>
+                <td id="foot-paid"></td>
+                <td id="foot-total"></td>
+                <td id="foot-net"></td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+          <p id="empty-state" class="muted">لا توجد أصناف بعد. أضف أول صنف من الفورم فوق.</p>
+        </div>
+      </section>
+    </section>
+
+    <footer class="muted">البيانات محفوظة في المتصفح فقط على هذا الجهاز.</footer>
+  </main>
+  <script src="logic.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
+```
+
+- [ ] **Step 2: Replace `styles.css` (Task 9 content + session/totals rules)**
+
+Replace the FULL content of `styles.css` with exactly the Task 9 file content, plus these rules appended at the end (after the `@media (max-width: 480px)` block):
+
+```css
+#new-session-btn { width: 100%; font-size: 17px; padding: 14px; margin-bottom: 16px; }
+#sessions-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.session-card { display: flex; align-items: center; gap: 12px; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; }
+.session-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; cursor: pointer; }
+.session-name { font-weight: 700; font-size: 16px; }
+.session-meta { font-size: 13px; color: #6b7280; }
+.session-delete { background: #dc2626; padding: 8px 12px; font-size: 13px; flex-shrink: 0; }
+#back-btn { background: #6b7280; margin-bottom: 12px; }
+#session-title { font-size: 20px; margin: 0 0 12px; }
+.totals-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+.total-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+.total-label { font-size: 13px; color: #6b7280; }
+.total-value { font-size: 18px; font-weight: 700; }
+#totals-foot td { font-weight: 700; background: #f9fafb; }
+@media (max-width: 480px) {
+  .totals-cards { grid-template-columns: 1fr; }
+}
+```
+
+Nothing else in `styles.css` changes (keep the entire Task 9 file byte-identical above these appended rules).
+
+- [ ] **Step 3: Verify markup and styles (adapt quoting for PowerShell if needed)**
+
+Check A — `index.html` contains all 28 IDs: the 13 old ones (`search-input`, `item-form`, `field-name`, `field-commercial`, `field-selling`, `field-qty`, `field-paid`, `submit-btn`, `cancel-edit-btn`, `form-error`, `items-tbody`, `empty-state`, `items-count`) plus the 15 new ones (`home-view`, `new-session-btn`, `home-error`, `sessions-list`, `sessions-empty`, `detail-view`, `back-btn`, `session-title`, `total-paid`, `total-sell`, `total-net`, `foot-count`, `foot-paid`, `foot-total`, `foot-net`); `detail-view` carries the `hidden` attribute; script order is still `logic.js` before `app.js`.
+Check B — `styles.css` contains each of `.session-card`, `.session-info`, `.session-name`, `.session-meta`, `.session-delete`, `#new-session-btn`, `#back-btn`, `#session-title`, `.totals-cards`, `.total-card`, `.total-label`, `.total-value`, `#totals-foot`.
+Expected: both checks pass.
+
+- [ ] **Step 4: Commit both files together**
+
+```bash
+git add index.html styles.css
+git commit -m "feat: add home/detail views, session cards, totals markup and styles"
+```
+
+Use `git -c user.name="opencode" -c user.email="opencode@local"` flags if git identity is not configured. Stage ONLY those two files. (`app.js` still targets the old single-view DOM after this commit — the app is temporarily inconsistent until Task 12; that is expected and stated here.)
+
+---
+
+### Task 12: App wiring for home/detail views, totals, migration (no new tests)
+
+**Files:**
+- Modify: `app.js` (full replace — exact content in Step 1)
+- Test: `tests/logic.test.js` (regression, no new tests)
+
+- [ ] **Step 1: Replace `app.js` with the two-view version**
+
+Replace the FULL content of `app.js` with exactly this content (Task 8 behavior preserved for the detail form/table; new: view switching, home list with relative time + counts, totals cards + footer row, session-scoped persistence, legacy migration at boot):
+
+```js
+(function () {
+  'use strict';
+
+  const homeView = document.getElementById('home-view');
+  const detailView = document.getElementById('detail-view');
+  const newSessionBtn = document.getElementById('new-session-btn');
+  const sessionsList = document.getElementById('sessions-list');
+  const sessionsEmpty = document.getElementById('sessions-empty');
+  const homeError = document.getElementById('home-error');
+  const backBtn = document.getElementById('back-btn');
+  const sessionTitle = document.getElementById('session-title');
+  const totalPaidEl = document.getElementById('total-paid');
+  const totalSellEl = document.getElementById('total-sell');
+  const totalNetEl = document.getElementById('total-net');
+  const footCount = document.getElementById('foot-count');
+  const footPaid = document.getElementById('foot-paid');
+  const footTotal = document.getElementById('foot-total');
+  const footNet = document.getElementById('foot-net');
+  const tbody = document.getElementById('items-tbody');
+  const emptyState = document.getElementById('empty-state');
+  const countEl = document.getElementById('items-count');
+  const form = document.getElementById('item-form');
+  const searchInput = document.getElementById('search-input');
+  const nameEl = document.getElementById('field-name');
+  const commercialEl = document.getElementById('field-commercial');
+  const sellingEl = document.getElementById('field-selling');
+  const qtyEl = document.getElementById('field-qty');
+  const paidEl = document.getElementById('field-paid');
+  const submitBtn = document.getElementById('submit-btn');
+  const cancelBtn = document.getElementById('cancel-edit-btn');
+  const errorEl = document.getElementById('form-error');
+
+  let sessions = [];
+  let activeSessionId = null;
+  let items = [];
+  let editingId = null;
+  let query = '';
+
+  function fmt(n) {
+    return formatMoney(n);
+  }
+
+  function activeSession() {
+    for (let i = 0; i < sessions.length; i++) {
+      if (sessions[i].id === activeSessionId) {
+        return sessions[i];
+      }
+    }
+    return null;
+  }
+
+  function showView(name) {
+    const home = name === 'home';
+    homeView.hidden = !home;
+    detailView.hidden = home;
+  }
+
+  function showError(msg) {
+    errorEl.textContent = msg;
+    errorEl.hidden = false;
+  }
+
+  function clearError() {
+    errorEl.textContent = '';
+    errorEl.hidden = true;
+  }
+
+  function showHomeError(msg) {
+    homeError.textContent = msg;
+    homeError.hidden = false;
+  }
+
+  function hideHomeError() {
+    homeError.textContent = '';
+    homeError.hidden = true;
+  }
+
+  function persistSessions() {
+    saveSessions(window.localStorage, sessions);
+  }
+
+  function persist() {
+    const s = activeSession();
+    if (s) {
+      s.items = items;
+    }
+    try {
+      persistSessions();
+    } catch (e) {
+      showError('تعذر الحفظ في المتصفح: ' + e.message);
+    }
+  }
+
+  function readForm() {
+    const commercialPrice = Number(commercialEl.value);
+    const quantity = Number(qtyEl.value);
+    return {
+      name: nameEl.value,
+      commercialPrice,
+      sellingPrice: Number(sellingEl.value),
+      quantity,
+      paidAmount: calcPaid(commercialPrice, quantity)
+    };
+  }
+
+  function fillForm(item) {
+    nameEl.value = item.name;
+    commercialEl.value = String(item.commercialPrice);
+    sellingEl.value = String(item.sellingPrice);
+    qtyEl.value = String(item.quantity);
+    paidEl.value = String(item.paidAmount);
+  }
+
+  function clearForm() {
+    form.reset();
+    commercialEl.value = '0';
+    sellingEl.value = '0';
+    qtyEl.value = '0';
+    paidEl.value = '0';
+  }
+
+  function setEditing(id) {
+    editingId = id;
+    submitBtn.textContent = id ? 'حفظ التعديل' : 'إضافة';
+    cancelBtn.hidden = !id;
+  }
+
+  function syncPaid() {
+    const commercialPrice = Number(commercialEl.value) || 0;
+    const quantity = Number(qtyEl.value) || 0;
+    paidEl.value = String(calcPaid(commercialPrice, quantity));
+  }
+
+  function cell(text) {
+    const td = document.createElement('td');
+    td.textContent = text;
+    return td;
+  }
+
+  function itemCountText(n) {
+    if (n === 0) {
+      return 'لا أصناف';
+    }
+    if (n === 1) {
+      return 'صنف واحد';
+    }
+    if (n === 2) {
+      return 'صنفان';
+    }
+    if (n <= 10) {
+      return n + ' أصناف';
+    }
+    return n + ' صنف';
+  }
+
+  function renderTotals() {
+    const t = sessionTotals({ items });
+    totalPaidEl.textContent = formatMoney(t.paid);
+    totalSellEl.textContent = formatMoney(t.total);
+    totalNetEl.textContent = formatMoney(t.net);
+    totalNetEl.className = 'total-value ' + (t.net < 0 ? 'negative' : 'positive');
+    footCount.textContent = String(items.length);
+    footPaid.textContent = formatMoney(t.paid);
+    footTotal.textContent = formatMoney(t.total);
+    footNet.textContent = formatMoney(t.net);
+    footNet.className = t.net < 0 ? 'negative' : 'positive';
+  }
+
+  function render() {
+    const visible = filterItems(items, query);
+    tbody.innerHTML = '';
+    visible.forEach((item) => {
+      const total = calcTotal(item.sellingPrice, item.quantity);
+      const net = calcNet(item.commercialPrice, item.sellingPrice, item.quantity);
+      const tr = document.createElement('tr');
+      tr.appendChild(cell(item.name));
+      tr.appendChild(cell(fmt(item.commercialPrice)));
+      tr.appendChild(cell(fmt(item.sellingPrice)));
+      tr.appendChild(cell(String(item.quantity)));
+      tr.appendChild(cell(fmt(item.paidAmount)));
+      tr.appendChild(cell(fmt(total)));
+      const netTd = cell(fmt(net));
+      netTd.className = net < 0 ? 'negative' : 'positive';
+      tr.appendChild(netTd);
+      const actionsTd = document.createElement('td');
+      const wrap = document.createElement('div');
+      wrap.className = 'row-actions';
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'btn-edit';
+      editBtn.textContent = 'تعديل';
+      editBtn.addEventListener('click', () => {
+        clearError();
+        fillForm(item);
+        setEditing(item.id);
+        nameEl.focus();
+      });
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'btn-delete';
+      delBtn.textContent = 'حذف';
+      delBtn.addEventListener('click', () => {
+        if (!window.confirm('حذف "' + item.name + '"؟')) {
+          return;
+        }
+        items = items.filter((it) => it.id !== item.id);
+        if (editingId === item.id) {
+          setEditing(null);
+          clearForm();
+        }
+        persist();
+        render();
+      });
+      wrap.appendChild(editBtn);
+      wrap.appendChild(delBtn);
+      actionsTd.appendChild(wrap);
+      tr.appendChild(actionsTd);
+      tbody.appendChild(tr);
+    });
+    emptyState.style.display = visible.length === 0 ? 'block' : 'none';
+    countEl.textContent = 'عدد الأصناف: ' + visible.length + ' / ' + items.length;
+    renderTotals();
+  }
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    clearError();
+    const input = readForm();
+    const check = validateItem({ name: input.name, commercialPrice: input.commercialPrice, sellingPrice: input.sellingPrice, quantity: input.quantity, paidAmount: input.paidAmount });
+    if (!check.ok) {
+      showError(check.errors[0]);
+      return;
+    }
+    if (editingId) {
+      items = items.map((it) => (it.id === editingId
+        ? { id: it.id, name: input.name.trim(), commercialPrice: input.commercialPrice, sellingPrice: input.sellingPrice, quantity: input.quantity, paidAmount: input.paidAmount, createdAt: it.createdAt }
+        : it));
+      setEditing(null);
+    } else {
+      items.push(createItem({ name: input.name, commercialPrice: input.commercialPrice, sellingPrice: input.sellingPrice, quantity: input.quantity, paidAmount: input.paidAmount }));
+    }
+    clearForm();
+    persist();
+    render();
+    nameEl.focus();
+  });
+
+  cancelBtn.addEventListener('click', () => {
+    setEditing(null);
+    clearForm();
+    clearError();
+  });
+
+  searchInput.addEventListener('input', () => {
+    query = searchInput.value;
+    render();
+  });
+
+  commercialEl.addEventListener('input', syncPaid);
+  qtyEl.addEventListener('input', syncPaid);
+
+  function renderHome() {
+    showView('home');
+    sessionsList.innerHTML = '';
+    const sorted = sessions.slice().sort((a, b) => b.createdAt - a.createdAt);
+    sorted.forEach((s) => {
+      const card = document.createElement('div');
+      card.className = 'session-card';
+      const info = document.createElement('div');
+      info.className = 'session-info';
+      const name = document.createElement('span');
+      name.className = 'session-name';
+      name.textContent = s.name;
+      const meta = document.createElement('span');
+      meta.className = 'session-meta';
+      meta.textContent = timeAgo(s.createdAt, Date.now()) + ' • ' + itemCountText(s.items.length);
+      info.appendChild(name);
+      info.appendChild(meta);
+      info.addEventListener('click', () => {
+        openSession(s.id);
+      });
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'session-delete';
+      del.textContent = 'حذف';
+      del.addEventListener('click', () => {
+        if (!window.confirm('حذف "' + s.name + '"؟')) {
+          return;
+        }
+        sessions = sessions.filter((x) => x.id !== s.id);
+        try {
+          persistSessions();
+        } catch (err) {
+          window.alert('تعذر الحفظ في المتصفح: ' + err.message);
+          return;
+        }
+        renderHome();
+      });
+      card.appendChild(info);
+      card.appendChild(del);
+      sessionsList.appendChild(card);
+    });
+    sessionsEmpty.style.display = sorted.length === 0 ? 'block' : 'none';
+  }
+
+  function openSession(id) {
+    activeSessionId = id;
+    const s = activeSession();
+    items = s ? s.items.slice() : [];
+    editingId = null;
+    query = '';
+    searchInput.value = '';
+    clearForm();
+    clearError();
+    hideHomeError();
+    setEditing(null);
+    sessionTitle.textContent = s ? s.name : '';
+    showView('detail');
+    render();
+  }
+
+  newSessionBtn.addEventListener('click', () => {
+    hideHomeError();
+    const s = createSession(sessions, Date.now());
+    sessions.unshift(s);
+    try {
+      persistSessions();
+    } catch (e) {
+      sessions = sessions.filter((x) => x.id !== s.id);
+      showHomeError('تعذر الحفظ في المتصفح: ' + e.message);
+      return;
+    }
+    openSession(s.id);
+  });
+
+  backBtn.addEventListener('click', () => {
+    renderHome();
+  });
+
+  function boot() {
+    try {
+      sessions = migrateLegacy(window.localStorage, Date.now());
+    } catch (e) {
+      try {
+        window.localStorage.setItem(SESSIONS_KEY + '_corrupt_' + Date.now(), window.localStorage.getItem(SESSIONS_KEY));
+      } catch (backupErr) {
+        /* ignore backup failure, still reset */
+      }
+      sessions = [];
+      renderHome();
+      showHomeError('كانت البيانات المحفوظة تالفة وتمت إعادة الضبط (تم الاحتفاظ بنسخة احتياطية).');
+      return;
+    }
+    renderHome();
+  }
+
+  boot();
+})();
+```
+
+- [ ] **Step 2: Run regression tests (logic untouched)**
+
+Run: `node --test tests/logic.test.js`
+Expected: PASS, 19 passing, 0 failing.
+
+- [ ] **Step 3: Verify wiring (adapt quoting for PowerShell if needed, same conditions)**
+
+Check A — `app.js` contains each of `renderHome(`, `openSession(`, `renderTotals(`, `sessionTotals(`, `timeAgo(`, `migrateLegacy(`, `createSession(`, `saveSessions(`, `SESSIONS_KEY`, `showView(`, `itemCountText(`, and contains NO `loadItems(` and NO `saveItems(` and NO `inventory_items_v1`.
+Check B — `app.js` still contains all Task 8 behaviors: `calcTotal(`, `calcNet(`, `calcPaid(`, `validateItem(`, `filterItems(`, `createItem(`, `formatMoney(`, `syncPaid`, `textContent`, with the only `innerHTML` occurrences being `tbody.innerHTML = ''` and `sessionsList.innerHTML = ''`.
+Expected: both checks pass.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add app.js
+git commit -m "feat: wire home/detail views, session totals, migration"
+```
+
+Use `git -c user.name="opencode" -c user.email="opencode@local"` flags if git identity is not configured. Stage ONLY `app.js`.
+
+**6. Amendment (Tasks 10–12) self-check:** Task 10 tests pin `autoSessionName` disambiguation (`(2)`, `(3)`), `sessionTotals` arithmetic (1100/1380/280), 14 `timeAgo` boundary strings incl. dual/plural Arabic forms and the 60-day date fallback (`يوم 12/7/2026` = Sep 10 minus 60 days), storage round-trip + `SESSIONS_KEY` value pin, and all four `migrateLegacy` branches (items→`جرد سابق` + key removal + sessions saved; missing key; empty array); `Date(2026, 8, …)` constructors keep date math timezone-local on both sides so asserts hold anywhere; Task 11 keeps all 13 old IDs byte-identical and adds 15 new ones with `hidden` on `detail-view`; Task 12 `openSession` copies items (`slice`) so detail edits can't alias stored state, every mutation write-throughs the whole sessions array, `renderTotals` derives from `sessionTotals` (single source with the footer), delete-session failure rolls back via `alert` + early return, failed session creation rolls back the unshift; legacy `loadItems`/`saveItems` remain exported for their untouched tests.
