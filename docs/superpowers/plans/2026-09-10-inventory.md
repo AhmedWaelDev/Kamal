@@ -1056,3 +1056,151 @@ Use `git -c user.name="opencode" -c user.email="opencode@local"` flags if git id
 **3. Type consistency:** function names and signatures are identical across tasks: `calcTotal(sellingPrice, quantity)`, `calcNet(commercialPrice, sellingPrice, quantity)`, `validateItem(input) → {ok, errors}`, `createItem(input) → item`, `filterItems(items, query)`, `loadItems(storage)`, `saveItems(storage, items)`, `STORAGE_KEY = 'inventory_items_v1'`.
 
 **4. Amendment (Task 8) self-check:** `calcPaid(commercialPrice, quantity)` follows the same pure-function shape; `validateItem` dropping the paid rule cannot break old tests (none assert on paid errors; the valid-item test passes extra `paidAmount` which is now ignored); `createItem` computing paid cannot break its old test (it never asserted `paidAmount`); `syncPaid` guards `NaN` via `|| 0`; submit path passes computed paid through both `validateItem` (always ok for paid) and `createItem`/update (recomputed identically); Task 7 paid expectations superseded (100×10 → paid 1000, total 1300, net 300). DOM IDs in `index.html` match `app.js` exactly (`search-input`, `item-form`, `field-name`, `field-commercial`, `field-selling`, `field-qty`, `field-paid`, `submit-btn`, `cancel-edit-btn`, `form-error`, `items-tbody`, `empty-state`, `items-count`).
+
+---
+
+### Task 9 (Amendment): Fix form overflow, mobile layout, whole-number money format
+
+**Rationale (user bug report with screenshots):** (1) the paid auto field overflows its card on desktop — grid inputs can't shrink; (2) at 375px the page scrolls horizontally and the title clips — same shrink root cause plus no phone breakpoint; (3) money shows `250.00`, user wants `250`.
+
+**Files:**
+- Modify: `styles.css` (full replace — exact content in Step 1)
+- Modify: `logic.js` (add `formatMoney`, extend exports)
+- Modify: `tests/logic.test.js` (append 1 test, keep existing 12)
+- Modify: `app.js` (one-line `fmt` change)
+- Test: `tests/logic.test.js`
+
+- [ ] **Step 1: Replace `styles.css` with the responsive version**
+
+Replace the full content of `styles.css` with exactly this content (identical to Task 5 except: shrink fixes `min-width: 0` / `width: 100%`, `flex-wrap` on search row, 16px inputs, and two breakpoints):
+
+```css
+* { box-sizing: border-box; }
+body { font-family: system-ui, "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; background: #f3f4f6; color: #111827; }
+.container { max-width: 1000px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 24px; margin: 8px 0 16px; }
+.card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+.search-row { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+#search-input { flex: 1 1 200px; min-width: 0; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 16px; }
+#items-count { font-size: 13px; color: #6b7280; white-space: nowrap; }
+.form-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.form-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; min-width: 0; }
+.form-grid input { width: 100%; max-width: 100%; min-width: 0; padding: 9px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 16px; }
+.form-actions { display: flex; gap: 8px; margin-top: 12px; }
+button { padding: 10px 18px; border: 0; border-radius: 8px; background: #2563eb; color: #fff; font-size: 15px; cursor: pointer; }
+button:hover { background: #1d4ed8; }
+#cancel-edit-btn { background: #6b7280; }
+.error { color: #b91c1c; font-size: 14px; }
+.muted { color: #6b7280; font-size: 13px; }
+.table-card { padding: 0; overflow: hidden; }
+.table-wrap { overflow-x: auto; padding: 16px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 760px; }
+th, td { padding: 10px 8px; border-bottom: 1px solid #e5e7eb; text-align: right; }
+thead th { background: #f9fafb; font-weight: 700; }
+.positive { color: #15803d; font-weight: 700; }
+.negative { color: #b91c1c; font-weight: 700; }
+.row-actions { display: flex; gap: 6px; }
+.row-actions button { padding: 6px 10px; font-size: 13px; }
+.btn-edit { background: #0d9488; }
+.btn-delete { background: #dc2626; }
+@media (max-width: 800px) {
+  .container { padding: 12px; }
+  h1 { font-size: 20px; }
+  .form-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .card { padding: 12px; }
+  .form-grid { grid-template-columns: 1fr; }
+  .form-actions { flex-direction: column; }
+  .form-actions button { width: 100%; }
+  #items-count { width: 100%; }
+  .table-wrap { padding: 12px; }
+  table { font-size: 13px; min-width: 680px; }
+  th, td { padding: 8px 6px; }
+  .row-actions { flex-direction: column; }
+}
+```
+
+- [ ] **Step 2: Append the formatMoney test (keep existing 12)**
+
+Append exactly this block to the end of `tests/logic.test.js`:
+
+```js
+test('formatMoney drops trailing zeros (250 not 250.00)', () => {
+  const { formatMoney } = require('../logic.js');
+  assert.equal(formatMoney(250), '250 ج.م');
+  assert.equal(formatMoney(1000), '1000 ج.م');
+  assert.equal(formatMoney(-20), '-20 ج.م');
+  assert.equal(formatMoney(15.5), '15.5 ج.م');
+  assert.equal(formatMoney(10.25), '10.25 ج.م');
+});
+```
+
+- [ ] **Step 3: Run tests to verify the new one fails**
+
+Run: `node --test tests/logic.test.js`
+Expected: FAIL with `formatMoney is not a function` (existing 12 pass, 1 new fails).
+
+- [ ] **Step 4: Add `formatMoney` to `logic.js` (2 exact edits)**
+
+Edit 1 — insert after the `calcPaid` function block (after the `}` closing `calcPaid`, before the blank line preceding `function isNonNegativeNumber`):
+
+```js
+function formatMoney(n) {
+  const rounded = Math.round(Number(n) * 100) / 100;
+  return String(rounded) + ' ج.م';
+}
+```
+
+Edit 2 — replace the exports line with exactly:
+
+```js
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { calcTotal, calcNet, calcPaid, validateItem, createItem, filterItems, loadItems, saveItems, STORAGE_KEY, formatMoney };
+}
+```
+
+Do not touch anything else in `logic.js`.
+
+- [ ] **Step 5: Point `app.js` at the shared formatter (1 exact edit)**
+
+In `app.js`, replace exactly:
+
+```js
+  function fmt(n) {
+    return Number(n).toFixed(2) + ' ج.م';
+  }
+```
+
+with exactly:
+
+```js
+  function fmt(n) {
+    return formatMoney(n);
+  }
+```
+
+Nothing else in `app.js` changes.
+
+- [ ] **Step 6: Run tests — expect 13 passing**
+
+Run: `node --test tests/logic.test.js`
+Expected: PASS, 13 passing, 0 failing.
+
+- [ ] **Step 7: Verify (adapt quoting for PowerShell if needed, same conditions)**
+
+Check A — `styles.css` contains each of `min-width: 0`, `width: 100%`, `flex-wrap: wrap`, `repeat(2, 1fr)`, `grid-template-columns: 1fr`, `max-width: 480px`, `max-width: 800px`.
+Check B — `app.js` contains `formatMoney(n)` and no longer contains `toFixed`.
+Check C — `index.html` untouched: `git diff --stat` for `index.html` must be empty.
+Expected: all checks pass.
+
+- [ ] **Step 8: Commit all four files together**
+
+```bash
+git add styles.css logic.js tests/logic.test.js app.js
+git commit -m "feat: fix form overflow, mobile layout, whole-number money format"
+```
+
+Use `git -c user.name="opencode" -c user.email="opencode@local"` flags if git identity is not configured. Stage ONLY those four files.
+
+**5. Amendment (Task 9) self-check:** shrink fix (`min-width: 0` on labels/inputs + `width: 100%`) addresses the desktop overflow and the mobile page-width blowout at the root; breakpoints chosen so 375px phones get a single column (no squeeze) while tablets keep 2; `formatMoney` rounds to cents then relies on `String()` to drop trailing zeros — `250`→`"250"`, `15.5`→`"15.5"`, `-20`→`"-20"`; `String(-0)` is `"0"` so no negative-zero display; old tests unaffected (none assert on `toFixed` output or font sizes); `index.html` untouched so all 13 IDs and script order intact.

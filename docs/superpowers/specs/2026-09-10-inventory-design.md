@@ -42,7 +42,12 @@ Item = {
 // net   = total - (commercialPrice * quantity)  [= total - paid]
 // paid is computed at create/update time via calcPaid and stored; validation ignores any caller-supplied paidAmount.
 ```
-// Display: 2 decimals, EGP suffix. Example: commercial 100, selling 130, qty 10 → paid 1000, total 1300, net 300.
+// Display: whole numbers when exact, up to 2 decimals otherwise (`250` not `250.00`; `15.5`, `10.25` kept), EGP suffix. Example: commercial 100, selling 130, qty 10 → paid 1000, total 1300, net 300.
+
+## Layout & Responsive (amended)
+- Form grid inputs must shrink: grid children `min-width: 0`, inputs `width: 100%` — no overflow outside the card on desktop, no page-level horizontal scroll on mobile.
+- Breakpoints: 5 columns desktop → 2 columns ≤800px → 1 column ≤480px; full-width action buttons and stacked search row on phones; table keeps scrolling inside its card with tighter padding/font on small screens.
+- Inputs use 16px font (prevents iOS auto-zoom on focus).
 
 ## Data Flow
 1. Load: on start, read `localStorage`, parse, validate array, render.
