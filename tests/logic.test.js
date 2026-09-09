@@ -194,3 +194,21 @@ test('migrateLegacy moves old items once into جرد سابق', () => {
   assert.deepEqual(migrateLegacy(f3, day), []);
   assert.equal(f3.getItem(LEGACY_KEY), null);
 });
+test('migrateLegacy quarantines corrupt legacy and keeps sessions', () => {
+  const { migrateLegacy, LEGACY_KEY, SESSIONS_KEY } = require('../logic.js');
+  const mem = {};
+  const fake = {
+    getItem: (k) => (k in mem ? mem[k] : null),
+    setItem: (k, v) => { mem[k] = String(v); },
+    removeItem: (k) => { delete mem[k]; }
+  };
+  const day = new Date(2026, 8, 10, 12, 0, 0).getTime();
+  const sessions = [{ id: 's1', name: 'جرد يوم 8/9/2026', createdAt: 1, items: [] }];
+  fake.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+  fake.setItem(LEGACY_KEY, '{oops');
+  const out = migrateLegacy(fake, day);
+  assert.deepEqual(out, sessions);
+  assert.equal(fake.getItem(LEGACY_KEY), null);
+  assert.equal(fake.getItem(LEGACY_KEY + '_corrupt_' + day), '{oops');
+  assert.deepEqual(JSON.parse(fake.getItem(SESSIONS_KEY)), sessions);
+});

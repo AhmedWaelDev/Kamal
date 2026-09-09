@@ -295,12 +295,13 @@
         if (!window.confirm('حذف "' + s.name + '"؟')) {
           return;
         }
+        const kept = sessions;
         sessions = sessions.filter((x) => x.id !== s.id);
         try {
           persistSessions();
         } catch (err) {
+          sessions = kept;
           window.alert('تعذر الحفظ في المتصفح: ' + err.message);
-          return;
         }
         renderHome();
       });

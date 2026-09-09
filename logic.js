@@ -179,10 +179,17 @@ function migrateLegacy(storage, now) {
   if (raw === null || raw === undefined) {
     return sessions;
   }
-  const items = JSON.parse(raw);
+  const t = now === undefined ? Date.now() : now;
+  let items = null;
+  try {
+    items = JSON.parse(raw);
+  } catch (e) {
+    items = null;
+  }
   if (Array.isArray(items) && items.length > 0) {
-    const t = now === undefined ? Date.now() : now;
     sessions.unshift({ id: makeId(), name: 'جرد سابق', createdAt: t, items });
+  } else if (!Array.isArray(items)) {
+    storage.setItem(LEGACY_KEY + '_corrupt_' + t, raw);
   }
   storage.removeItem(LEGACY_KEY);
   saveSessions(storage, sessions);
