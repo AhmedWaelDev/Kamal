@@ -18,13 +18,11 @@
     </section>
 
     <section id="detail-view" hidden>
-      <button id="back-btn" type="button">→ الرئيسية</button>
-      <h2 id="session-title"></h2>
+      <div class="detail-head">
+        <button id="back-btn" type="button">→ الرئيسية</button>
+        <h2 id="session-title"></h2>
+      </div>
       <section class="card">
-        <div class="search-row">
-          <input id="search-input" type="search" placeholder="بحث باسم الصنف..." autocomplete="off">
-          <span id="items-count"></span>
-        </div>
         <form id="item-form">
           <div class="form-grid">
             <label>اسم الصنف<input id="field-name" type="text" required></label>
@@ -39,6 +37,13 @@
             <button id="cancel-edit-btn" type="button" hidden>إلغاء التعديل</button>
           </div>
         </form>
+      </section>
+
+      <section class="card search-card">
+        <div class="search-row">
+          <input id="search-input" type="search" placeholder="بحث باسم الصنف..." autocomplete="off">
+          <span id="items-count"></span>
+        </div>
       </section>
 
       <div class="totals-cards">
