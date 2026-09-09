@@ -2275,3 +2275,84 @@ git commit -m "feat: polish back button into header row, move search above total
 Use `git -c user.name="opencode" -c user.email="opencode@local"` flags if git identity is not configured. Stage ONLY those two files. (`app.js` needs no changes — all IDs preserved.)
 
 **8. Amendment (Task 14) self-check:** header row is flex with `min-width: 0` on the title so long session names shrink instead of pushing the back button off-screen; ghost button keeps `type="button"` (no accidental submits) and its own `:hover` beats the generic blue `button:hover` by ID specificity; search keeps its single input instance (no duplicate-ID risk) with count attached; `search-card` neutralizes the row's bottom margin so the card doesn't double-space; `app.js` untouched because every consumed ID survives at the same spelling — verified by Check A.
+
+---
+
+### Task 15 (Amendment): Move search under the totals (below الصافي للكل)
+
+**Rationale (user follow-up to Task 14):** search should sit right under the totals cards instead of above them — new order: form → totals → search → table. Pure move of the existing block; no style, ID, JS, or logic changes.
+
+**Files:**
+- Modify: `index.html` (2 exact edits: cut + paste of the same block)
+- Test: `tests/logic.test.js` (regression, no new tests)
+
+- [ ] **Step 1: Cut the search card from above the totals (edit 1 of 2)**
+
+Replace exactly:
+
+```html
+      <section class="card search-card">
+        <div class="search-row">
+          <input id="search-input" type="search" placeholder="بحث باسم الصنف..." autocomplete="off">
+          <span id="items-count"></span>
+        </div>
+      </section>
+
+      <div class="totals-cards">
+```
+
+with exactly:
+
+```html
+      <div class="totals-cards">
+```
+
+- [ ] **Step 2: Paste it below the totals, above the table (edit 2 of 2)**
+
+Replace exactly:
+
+```html
+        <div class="total-card">
+          <span class="total-label">الصافي للكل</span>
+          <span id="total-net" class="total-value"></span>
+        </div>
+      </div>
+
+      <section class="card table-card">
+```
+
+with exactly:
+
+```html
+        <div class="total-card">
+          <span class="total-label">الصافي للكل</span>
+          <span id="total-net" class="total-value"></span>
+        </div>
+      </div>
+
+      <section class="card search-card">
+        <div class="search-row">
+          <input id="search-input" type="search" placeholder="بحث باسم الصنف..." autocomplete="off">
+          <span id="items-count"></span>
+        </div>
+      </section>
+
+      <section class="card table-card">
+```
+
+- [ ] **Step 3: Verify (adapt quoting for PowerShell if needed, same conditions)**
+
+Check A — `index.html`: `search-card` block occurs exactly once; `search-input` occurs exactly once; document order is form (`item-form`) → totals (`totals-cards`) → search (`search-card`) → table (`items-tbody`) by string offsets; all 28 IDs still present exactly once each; script order still `logic.js` before `app.js`.
+Check B — `git diff --stat` shows ONLY `index.html` changed; `styles.css`, `app.js`, `logic.js`, tests untouched; regression `node --test tests/logic.test.js` → PASS, 20/0.
+Expected: both checks pass.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add index.html
+git commit -m "feat: move search card below totals"
+```
+
+Use `git -c user.name="opencode" -c user.email="opencode@local"` flags if git identity is not configured. Stage ONLY `index.html`. (`app.js` needs no changes — all IDs preserved at the same spelling.)
+
+**9. Amendment (Task 15) self-check:** cut and paste move the identical block (same indentation, same attributes), so no duplicate IDs and no orphaned references; order asserted by offsets in Check A; styles untouched because `.search-card`/`.search-row` rules are position-independent; `app.js` untouched because lookups are parent-agnostic `getElementById`.
