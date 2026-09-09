@@ -42,12 +42,14 @@
   }
 
   function readForm() {
+    const commercialPrice = Number(commercialEl.value);
+    const quantity = Number(qtyEl.value);
     return {
       name: nameEl.value,
-      commercialPrice: Number(commercialEl.value),
+      commercialPrice,
       sellingPrice: Number(sellingEl.value),
-      quantity: Number(qtyEl.value),
-      paidAmount: Number(paidEl.value)
+      quantity,
+      paidAmount: calcPaid(commercialPrice, quantity)
     };
   }
 
@@ -71,6 +73,12 @@
     editingId = id;
     submitBtn.textContent = id ? 'حفظ التعديل' : 'إضافة';
     cancelBtn.hidden = !id;
+  }
+
+  function syncPaid() {
+    const commercialPrice = Number(commercialEl.value) || 0;
+    const quantity = Number(qtyEl.value) || 0;
+    paidEl.value = String(calcPaid(commercialPrice, quantity));
   }
 
   function cell(text) {
@@ -168,6 +176,9 @@
     render();
   });
 
+  commercialEl.addEventListener('input', syncPaid);
+  qtyEl.addEventListener('input', syncPaid);
+
   function boot() {
     try {
       items = loadItems(window.localStorage);
@@ -180,6 +191,7 @@
       items = [];
       showError('كانت البيانات المحفوظة تالفة وتمت إعادة الضبط (تم الاحتفاظ بنسخة احتياطية).');
     }
+    syncPaid();
     render();
   }
 

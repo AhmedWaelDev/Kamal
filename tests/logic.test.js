@@ -71,3 +71,23 @@ test('loadItems throws SyntaxError on corrupt JSON', () => {
   const fakeStorage = { getItem: () => '{oops', setItem: () => {} };
   assert.throws(() => loadItems(fakeStorage), SyntaxError);
 });
+
+test('calcPaid multiplies commercial price by quantity', () => {
+  const { calcPaid } = require('../logic.js');
+  assert.equal(calcPaid(100, 10), 1000);
+  assert.equal(calcPaid(30, 20), 600);
+  assert.equal(calcPaid(0, 5), 0);
+});
+
+test('validateItem ignores paidAmount (auto-computed, may be stale)', () => {
+  const { validateItem } = require('../logic.js');
+  const r = validateItem({ name: 'شاي', commercialPrice: 100, sellingPrice: 130, quantity: 10, paidAmount: -5 });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.errors, []);
+});
+
+test('createItem computes paidAmount from commercial price and quantity', () => {
+  const { createItem } = require('../logic.js');
+  const item = createItem({ name: 'شاي', commercialPrice: 100, sellingPrice: 130, quantity: 10, paidAmount: 0 });
+  assert.equal(item.paidAmount, 1000);
+});

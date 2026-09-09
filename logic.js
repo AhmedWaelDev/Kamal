@@ -6,6 +6,10 @@ function calcNet(commercialPrice, sellingPrice, quantity) {
   return calcTotal(sellingPrice, quantity) - commercialPrice * quantity;
 }
 
+function calcPaid(commercialPrice, quantity) {
+  return commercialPrice * quantity;
+}
+
 function isNonNegativeNumber(n) {
   return typeof n === 'number' && Number.isFinite(n) && n >= 0;
 }
@@ -24,9 +28,6 @@ function validateItem(input) {
   if (!isNonNegativeNumber(input.quantity) || !Number.isInteger(input.quantity)) {
     errors.push('الكمية يجب أن تكون عدداً صحيحاً >= 0');
   }
-  if (!isNonNegativeNumber(input.paidAmount)) {
-    errors.push('السعر المدفوع يجب أن يكون رقماً >= 0');
-  }
   return { ok: errors.length === 0, errors };
 }
 
@@ -44,7 +45,7 @@ function createItem(input) {
     commercialPrice: input.commercialPrice,
     sellingPrice: input.sellingPrice,
     quantity: input.quantity,
-    paidAmount: input.paidAmount,
+    paidAmount: calcPaid(input.commercialPrice, input.quantity),
     createdAt: Date.now()
   };
 }
@@ -76,5 +77,5 @@ function saveItems(storage, items) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { calcTotal, calcNet, validateItem, createItem, filterItems, loadItems, saveItems, STORAGE_KEY };
+  module.exports = { calcTotal, calcNet, calcPaid, validateItem, createItem, filterItems, loadItems, saveItems, STORAGE_KEY };
 }
