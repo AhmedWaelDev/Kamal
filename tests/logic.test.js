@@ -47,3 +47,27 @@ test('filterItems matches by name substring, empty query returns all', () => {
   assert.equal(filterItems(items, 'سكر').length, 1);
   assert.equal(filterItems(items, 'لا يوجد').length, 0);
 });
+
+test('saveItems then loadItems round-trips', () => {
+  const { saveItems, loadItems } = require('../logic.js');
+  const mem = {};
+  const fakeStorage = {
+    getItem: (k) => (k in mem ? mem[k] : null),
+    setItem: (k, v) => { mem[k] = String(v); }
+  };
+  const items = [{ id: 'a', name: 'شاي', commercialPrice: 1, sellingPrice: 2, quantity: 3, paidAmount: 0, createdAt: 1 }];
+  saveItems(fakeStorage, items);
+  assert.deepEqual(loadItems(fakeStorage), items);
+});
+
+test('loadItems returns [] when key is missing', () => {
+  const { loadItems } = require('../logic.js');
+  const fakeStorage = { getItem: () => null, setItem: () => {} };
+  assert.deepEqual(loadItems(fakeStorage), []);
+});
+
+test('loadItems throws SyntaxError on corrupt JSON', () => {
+  const { loadItems } = require('../logic.js');
+  const fakeStorage = { getItem: () => '{oops', setItem: () => {} };
+  assert.throws(() => loadItems(fakeStorage), SyntaxError);
+});

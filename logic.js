@@ -57,6 +57,24 @@ function filterItems(items, query) {
   return items.filter((it) => it.name.toLowerCase().includes(q));
 }
 
+const STORAGE_KEY = 'inventory_items_v1';
+
+function loadItems(storage) {
+  const raw = storage.getItem(STORAGE_KEY);
+  if (raw === null || raw === undefined) {
+    return [];
+  }
+  const parsed = JSON.parse(raw);
+  if (!Array.isArray(parsed)) {
+    throw new SyntaxError('stored inventory is not an array');
+  }
+  return parsed;
+}
+
+function saveItems(storage, items) {
+  storage.setItem(STORAGE_KEY, JSON.stringify(items));
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { calcTotal, calcNet, validateItem, createItem, filterItems };
+  module.exports = { calcTotal, calcNet, validateItem, createItem, filterItems, loadItems, saveItems, STORAGE_KEY };
 }
