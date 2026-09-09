@@ -1,6 +1,21 @@
 (function () {
   'use strict';
 
+  const homeView = document.getElementById('home-view');
+  const detailView = document.getElementById('detail-view');
+  const newSessionBtn = document.getElementById('new-session-btn');
+  const sessionsList = document.getElementById('sessions-list');
+  const sessionsEmpty = document.getElementById('sessions-empty');
+  const homeError = document.getElementById('home-error');
+  const backBtn = document.getElementById('back-btn');
+  const sessionTitle = document.getElementById('session-title');
+  const totalPaidEl = document.getElementById('total-paid');
+  const totalSellEl = document.getElementById('total-sell');
+  const totalNetEl = document.getElementById('total-net');
+  const footCount = document.getElementById('foot-count');
+  const footPaid = document.getElementById('foot-paid');
+  const footTotal = document.getElementById('foot-total');
+  const footNet = document.getElementById('foot-net');
   const tbody = document.getElementById('items-tbody');
   const emptyState = document.getElementById('empty-state');
   const countEl = document.getElementById('items-count');
@@ -15,6 +30,8 @@
   const cancelBtn = document.getElementById('cancel-edit-btn');
   const errorEl = document.getElementById('form-error');
 
+  let sessions = [];
+  let activeSessionId = null;
   let items = [];
   let editingId = null;
   let query = '';
@@ -23,12 +40,19 @@
     return formatMoney(n);
   }
 
-  function persist() {
-    try {
-      saveItems(window.localStorage, items);
-    } catch (e) {
-      showError('تعذر الحفظ في المتصفح: ' + e.message);
+  function activeSession() {
+    for (let i = 0; i < sessions.length; i++) {
+      if (sessions[i].id === activeSessionId) {
+        return sessions[i];
+      }
     }
+    return null;
+  }
+
+  function showView(name) {
+    const home = name === 'home';
+    homeView.hidden = !home;
+    detailView.hidden = home;
   }
 
   function showError(msg) {
@@ -39,6 +63,32 @@
   function clearError() {
     errorEl.textContent = '';
     errorEl.hidden = true;
+  }
+
+  function showHomeError(msg) {
+    homeError.textContent = msg;
+    homeError.hidden = false;
+  }
+
+  function hideHomeError() {
+    homeError.textContent = '';
+    homeError.hidden = true;
+  }
+
+  function persistSessions() {
+    saveSessions(window.localStorage, sessions);
+  }
+
+  function persist() {
+    const s = activeSession();
+    if (s) {
+      s.items = items;
+    }
+    try {
+      persistSessions();
+    } catch (e) {
+      showError('تعذر الحفظ في المتصفح: ' + e.message);
+    }
   }
 
   function readForm() {
@@ -85,6 +135,35 @@
     const td = document.createElement('td');
     td.textContent = text;
     return td;
+  }
+
+  function itemCountText(n) {
+    if (n === 0) {
+      return 'لا أصناف';
+    }
+    if (n === 1) {
+      return 'صنف واحد';
+    }
+    if (n === 2) {
+      return 'صنفان';
+    }
+    if (n <= 10) {
+      return n + ' أصناف';
+    }
+    return n + ' صنف';
+  }
+
+  function renderTotals() {
+    const t = sessionTotals({ items });
+    totalPaidEl.textContent = formatMoney(t.paid);
+    totalSellEl.textContent = formatMoney(t.total);
+    totalNetEl.textContent = formatMoney(t.net);
+    totalNetEl.className = 'total-value ' + (t.net < 0 ? 'negative' : 'positive');
+    footCount.textContent = String(items.length);
+    footPaid.textContent = formatMoney(t.paid);
+    footTotal.textContent = formatMoney(t.total);
+    footNet.textContent = formatMoney(t.net);
+    footNet.className = t.net < 0 ? 'negative' : 'positive';
   }
 
   function render() {
@@ -140,6 +219,7 @@
     });
     emptyState.style.display = visible.length === 0 ? 'block' : 'none';
     countEl.textContent = 'عدد الأصناف: ' + visible.length + ' / ' + items.length;
+    renderTotals();
   }
 
   form.addEventListener('submit', (e) => {
@@ -179,20 +259,107 @@
   commercialEl.addEventListener('input', syncPaid);
   qtyEl.addEventListener('input', syncPaid);
 
+  function renderHome() {
+    showView('home');
+    sessionsList.innerHTML = '';
+    const sorted = sessions.slice().sort((a, b) => b.createdAt - a.createdAt);
+    sorted.forEach((s) => {
+      const card = document.createElement('div');
+      card.className = 'session-card';
+      const info = document.createElement('div');
+      info.className = 'session-info';
+      info.setAttribute('role', 'button');
+      info.tabIndex = 0;
+      info.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openSession(s.id);
+        }
+      });
+      const name = document.createElement('span');
+      name.className = 'session-name';
+      name.textContent = s.name;
+      const meta = document.createElement('span');
+      meta.className = 'session-meta';
+      meta.textContent = timeAgo(s.createdAt, Date.now()) + ' • ' + itemCountText(s.items.length);
+      info.appendChild(name);
+      info.appendChild(meta);
+      info.addEventListener('click', () => {
+        openSession(s.id);
+      });
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'session-delete';
+      del.textContent = 'حذف';
+      del.addEventListener('click', () => {
+        if (!window.confirm('حذف "' + s.name + '"؟')) {
+          return;
+        }
+        sessions = sessions.filter((x) => x.id !== s.id);
+        try {
+          persistSessions();
+        } catch (err) {
+          window.alert('تعذر الحفظ في المتصفح: ' + err.message);
+          return;
+        }
+        renderHome();
+      });
+      card.appendChild(info);
+      card.appendChild(del);
+      sessionsList.appendChild(card);
+    });
+    sessionsEmpty.style.display = sorted.length === 0 ? 'block' : 'none';
+  }
+
+  function openSession(id) {
+    activeSessionId = id;
+    const s = activeSession();
+    items = s ? s.items.slice() : [];
+    editingId = null;
+    query = '';
+    searchInput.value = '';
+    clearForm();
+    clearError();
+    hideHomeError();
+    setEditing(null);
+    sessionTitle.textContent = s ? s.name : '';
+    showView('detail');
+    render();
+  }
+
+  newSessionBtn.addEventListener('click', () => {
+    hideHomeError();
+    const s = createSession(sessions, Date.now());
+    sessions.unshift(s);
+    try {
+      persistSessions();
+    } catch (e) {
+      sessions = sessions.filter((x) => x.id !== s.id);
+      showHomeError('تعذر الحفظ في المتصفح: ' + e.message);
+      return;
+    }
+    openSession(s.id);
+  });
+
+  backBtn.addEventListener('click', () => {
+    renderHome();
+  });
+
   function boot() {
     try {
-      items = loadItems(window.localStorage);
+      sessions = migrateLegacy(window.localStorage, Date.now());
     } catch (e) {
       try {
-        window.localStorage.setItem(STORAGE_KEY + '_corrupt_' + Date.now(), window.localStorage.getItem(STORAGE_KEY));
+        window.localStorage.setItem(SESSIONS_KEY + '_corrupt_' + Date.now(), window.localStorage.getItem(SESSIONS_KEY));
       } catch (backupErr) {
         /* ignore backup failure, still reset */
       }
-      items = [];
-      showError('كانت البيانات المحفوظة تالفة وتمت إعادة الضبط (تم الاحتفاظ بنسخة احتياطية).');
+      sessions = [];
+      renderHome();
+      showHomeError('كانت البيانات المحفوظة تالفة وتمت إعادة الضبط (تم الاحتفاظ بنسخة احتياطية).');
+      return;
     }
-    syncPaid();
-    render();
+    renderHome();
   }
 
   boot();
