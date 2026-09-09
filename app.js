@@ -20,7 +20,7 @@
   let query = '';
 
   function fmt(n) {
-    return Number(n).toFixed(2) + ' ج.م';
+    return formatMoney(n);
   }
 
   function persist() {

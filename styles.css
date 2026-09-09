@@ -3,12 +3,12 @@ body { font-family: system-ui, "Segoe UI", Tahoma, Arial, sans-serif; margin: 0;
 .container { max-width: 1000px; margin: 0 auto; padding: 16px; }
 h1 { font-size: 24px; margin: 8px 0 16px; }
 .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
-.search-row { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
-#search-input { flex: 1; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 15px; }
+.search-row { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+#search-input { flex: 1 1 200px; min-width: 0; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 16px; }
 #items-count { font-size: 13px; color: #6b7280; white-space: nowrap; }
 .form-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
-.form-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
-.form-grid input { padding: 9px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; }
+.form-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; min-width: 0; }
+.form-grid input { width: 100%; max-width: 100%; min-width: 0; padding: 9px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 16px; }
 .form-actions { display: flex; gap: 8px; margin-top: 12px; }
 button { padding: 10px 18px; border: 0; border-radius: 8px; background: #2563eb; color: #fff; font-size: 15px; cursor: pointer; }
 button:hover { background: #1d4ed8; }
@@ -26,4 +26,19 @@ thead th { background: #f9fafb; font-weight: 700; }
 .row-actions button { padding: 6px 10px; font-size: 13px; }
 .btn-edit { background: #0d9488; }
 .btn-delete { background: #dc2626; }
-@media (max-width: 800px) { .form-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 800px) {
+  .container { padding: 12px; }
+  h1 { font-size: 20px; }
+  .form-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .card { padding: 12px; }
+  .form-grid { grid-template-columns: 1fr; }
+  .form-actions { flex-direction: column; }
+  .form-actions button { width: 100%; }
+  #items-count { width: 100%; }
+  .table-wrap { padding: 12px; }
+  table { font-size: 13px; min-width: 680px; }
+  th, td { padding: 8px 6px; }
+  .row-actions { flex-direction: column; }
+}

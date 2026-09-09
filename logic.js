@@ -10,6 +10,11 @@ function calcPaid(commercialPrice, quantity) {
   return commercialPrice * quantity;
 }
 
+function formatMoney(n) {
+  const rounded = Math.round(Number(n) * 100) / 100;
+  return String(rounded) + ' ج.م';
+}
+
 function isNonNegativeNumber(n) {
   return typeof n === 'number' && Number.isFinite(n) && n >= 0;
 }
@@ -77,5 +82,5 @@ function saveItems(storage, items) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { calcTotal, calcNet, calcPaid, validateItem, createItem, filterItems, loadItems, saveItems, STORAGE_KEY };
+  module.exports = { calcTotal, calcNet, calcPaid, validateItem, createItem, filterItems, loadItems, saveItems, STORAGE_KEY, formatMoney };
 }

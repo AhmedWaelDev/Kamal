@@ -91,3 +91,12 @@ test('createItem computes paidAmount from commercial price and quantity', () => 
   const item = createItem({ name: 'شاي', commercialPrice: 100, sellingPrice: 130, quantity: 10, paidAmount: 0 });
   assert.equal(item.paidAmount, 1000);
 });
+
+test('formatMoney drops trailing zeros (250 not 250.00)', () => {
+  const { formatMoney } = require('../logic.js');
+  assert.equal(formatMoney(250), '250 ج.م');
+  assert.equal(formatMoney(1000), '1000 ج.م');
+  assert.equal(formatMoney(-20), '-20 ج.م');
+  assert.equal(formatMoney(15.5), '15.5 ج.م');
+  assert.equal(formatMoney(10.25), '10.25 ج.م');
+});
